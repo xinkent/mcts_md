@@ -24,7 +24,7 @@ class Node:
             lambda c: c.rmsd/c.visits + UCTK * sqrt(2*log(self.visits)/c.visits to vary the amount of
             exploration versus exploitation.
         """        
-        s = sorted(self.childNodes, key = lambda c: c.rmsd/c.visits - self.c * sqrt(2*log(self.visits)/c.visits))[0]
+        s = sorted(self.childNodes, key = lambda c: c.rmsd/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[0]
         return s
 
     def AddChild(self, s):
@@ -66,7 +66,7 @@ class Node:
         if self.parentNode == None:
                 return "[S:" + str(self.state)  + " W/V:" + str(self.rmsd) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
         else:
-            return "[S:" + str(self.state) + "  UCT:" + str(self.rmsd/self.visits - self.c * sqrt(2 * log(self.parentNode.visits)/self.visits)) + " W/V:" + str(self.rmsd) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
+            return "[S:" + str(self.state) + "  UCT:" + str(self.rmsd/self.visits + self.c * sqrt(2 * log(self.parentNode.visits)/self.visits)) + " W/V:" + str(self.rmsd) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
 
     def TreeToString(self, indent):
         s = self.IndentString(indent) + str(self)
@@ -90,8 +90,8 @@ class Node:
 def UCT(rootstate, itermax, verbose = False):
     rootnode = Node(state = rootstate)
     n_state = 0
-    min_rmsd = 10000
-    min_node    = rootnode
+    max_rmsd = -10000
+    max_node    = rootnode
     o = open('log.txt','w')
     ot = open('tree.txt','w')
     o.close()
@@ -111,11 +111,11 @@ def UCT(rootstate, itermax, verbose = False):
             n_state += 1
 
         # Backpropagate
-        result = node.MDrun()
+        result = -1 * node.MDrun()
         # result = get_random()
-        if result < min_rmsd:
-            min_rmsd = result
-            min_node = node
+        if result > max_rmsd:
+            max_rmsd = result
+            max_node = node
         while node != None: # backpropagate from the expanded node and work back to the root node
             node.Update(result) # state is terminal. Update node with result from POV of node.playerJustMoved
             node = node.parentNode
@@ -123,12 +123,12 @@ def UCT(rootstate, itermax, verbose = False):
         # Output some information about the tree - can be omitted
         # if (verbose): ot.write(rootnode.TreeToString(0))
         # else: ot.write(rootnode.ChildrenToString())
-        o.write(str(min_rmsd) + '\n')
+        o.write(str(max_rmsd) + '\n')
         o.close()
     # return sorted(rootnode.childNodes, key = lambda c: c.visits)[-1].move # return the move that was most visited
     
     trjs = ""
-    node = min_node
+    node = max_node
     while True:
         trjs = "md_" + str(node.state) + ".trr " + trjs
         node = node.parentNode
