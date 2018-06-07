@@ -8,7 +8,7 @@ Before running MD, We have to do some preparations which are adding ion, energy 
 We need the .mdp files to do each manipulation of such preparations. The .mdp files here are intended only for use with this chignolin folding
 sample. You have to set the parameters for each of your tasks.  
 ```
-initialize() 
+initialize.py() 
 ```
 ### PACS MD
 In the PACS MD, the number of cycles is 100 and the number of parallele cascades is 5 in default configuration.
