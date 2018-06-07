@@ -12,7 +12,7 @@ initialize.py()
 ```
 ### PACS MD
 In the PACS MD, the number of cycles is 100 and the number of parallele cascades is 5 in default configuration.
-This program makes output files including trajectory file (merged_pacs.trr), rmsd to the target structure (rmsd_pacs.xvg).
+This program makes output files including trajectory file (merged_pacs.trr) and rmsd to the target structure (rmsd_pacs.xvg).
 ```
 python pacs_md.py
 ```
