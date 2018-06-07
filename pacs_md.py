@@ -1,58 +1,7 @@
-#--------------------------------------------------------------------------------------------------------
-#
-#--------------------------------------------------------------------------------------------------------
 import numpy as np
 # from gromacs import tools
 import os, glob
 from multiprocessing import Pool
-
-def initialize():
-    os.system('gmx_mpi pdb2gmx -f 2lzm.pdb -o 2lzm_processed.gro -ignh -water spce -ff amber99sb')
-
-    # Set the simulation config
-    os.system('gmx_mpi editconf -f 2lzm_processed.gro -o 2lzm_newbox.gro -c -d 1.0 -bt cubic')
-
-    # Add solvate
-    os.system('gmx_mpi solvate -cp 2lzm_newbox.gro -cs spc216.gro -o 2lzm_solv.gro -p topol.top')
-
-    # Add ions
-    os.system('gmx_mpi grompp -f ions.mdp -c 2lzm_solv.gro -p topol.top -o ions.tpr -maxwarn 5')
-    os.system("echo 13 | gmx_mpi genion -s ions.tpr -o 2lzm_solv_ions.gro -p topol.top -pname NA -nname CL -nn 8")
-
-    # Energy minimization
-    os.system('gmx_mpi grompp -f minim.mdp -c 2lzm_solv_ions.gro -p topol.top -o em.tpr')
-    os.system('gmx_mpi mdrun -deffnm em')
-
-    # Equilibration
-    os.system('gmx_mpi grompp -f nvt.mdp -c em.gro -p topol.top -o nvt.tpr -r em.gro')
-    os.system('gmx_mpi mdrun -deffnm nvt')
-
-    os.system('gmx_mpi grompp -f npt.mdp -c nvt.gro -p topol.top -o npt.tpr -r nvt.gro')
-    os.system('gmx_mpi mdrun -deffnm npt')
-
-def initialize_target():
-    os.system('gmx_mpi pdb2gmx -f 150l_C_K162mod.pdb -o 150l_processed.gro -ignh -water spce -ff amber99sb -p 150l_topol.top')
-
-    # Set the simulation config
-    os.system('gmx_mpi editconf -f 150l_processed.gro -o 150l_newbox.gro -c -d 1.0 -bt cubic')
-
-    # Add solvate
-    os.system('gmx_mpi solvate -cp 150l_newbox.gro -cs spc216.gro -o 150l_solv.gro -p 150l_topol.top')
-
-    # Add ions
-    os.system('gmx_mpi grompp -f ions.mdp -c 150l_solv.gro -p 150l_topol.top -o 150l_ions.tpr -maxwarn 5')
-    os.system("echo 13 | gmx_mpi genion -s 150l_ions.tpr -o 150l_solv_ions.gro -p 150l_topol.top -pname NA -nname CL -nn 8")
-
-    # Energy minimization
-    os.system('gmx_mpi grompp -f minim.mdp -c 150l_solv_ions.gro -p 150l_topol.top -o 150l_em.tpr')
-    os.system('gmx_mpi mdrun -deffnm 150l_em')
-
-    # Equilibration
-    os.system('gmx_mpi grompp -f nvt.mdp -c 150l_em.gro -p 150l_topol.top -o 150l_nvt.tpr -r 150l_em.gro')
-    os.system('gmx_mpi mdrun -deffnm 150l_nvt')
-
-    os.system('gmx_mpi grompp -f npt.mdp -c 150l_nvt.gro -p 150l_topol.top -o 150l_npt.tpr -r 150l_nvt.gro')
-    os.system('gmx_mpi mdrun -deffnm 150l_npt')
 
 def first_cycle(n):
     print(n)
@@ -88,50 +37,37 @@ def read_rmsd(step, n):
     f.close()
     return rmsd
 
+def pacs_md()
+    dt = 1 # ps for each step
+    nsteps = 101 # number of steps for each md including inital state
+    n_para = 5 # pacs_mdの並列数
+    MAX_CYCLE = 100 
+    pass_flag = False
+    cycle_step = 0
+    log = np.zeros((MAX_CYCLE - cycle_step, n_para))  # trajectory間の接続を記録
+    log_i = 0
+    # 途中(100回目)から再開する場合
+    # pass_flag = True
+    # cycle_step = 100
 
-dt = 1 # ps for each step
-nsteps = 101 # step for each md including inital state
-n_para = 5
-MAX_CYCLE = 100
-pass_flag = False
-
-cycle_step = 0
-log = np.zeros((MAX_CYCLE - cycle_step, n_para))
-# initialize()
-# initialize_target()
-
-# 並列処理
-# p = Pool(20)
-# p.map(first_cycle, range(n_para))
-# 逐次処理
-# for i in range(n_para):
-#     first_cycle(i)
-
-
-# 途中から再開する場合
-# pass_flag = True
-# cycle_step -= 1
-log_i = 0
-
-while cycle_step < MAX_CYCLE:
-    if not pass_flag:
-        if cycle_step == 0:
-            for i in range(n_para):
-                first_cycle(i)
+    while cycle_step < MAX_CYCLE:
+        if not pass_flag:
+            if cycle_step == 0:
+                for i in range(n_para):
+                    first_cycle(i)
+            else:
+                for i in range(n_para):
+                    md_cycle([cycle_step, i, min_rmsd[i]])
         else:
-            for i in range(n_para):
-                md_cycle([cycle_step, i, min_rmsd[i]])
-    else:
-        pass_flag = False
-    rmsd_list = np.zeros(n_para * nsteps)
-    for i in range(n_para):
-        rmsd_list[i * nsteps : (i+1) * nsteps] = read_rmsd(cycle_step, i)
-    min_rmsd = rmsd_list.argsort()[:n_para]
-    min_rmsd = [(r // nsteps, r % nsteps) for r in min_rmsd]
-    log[log_i,:] = [r[0] for r in min_rmsd]
-    cycle_step += 1
-    log_i += 1
+            pass_flag = False
+        rmsd_list = np.zeros(n_para * nsteps)
+        for i in range(n_para):
+            rmsd_list[i * nsteps : (i+1) * nsteps] = read_rmsd(cycle_step, i)
+        min_rmsd = rmsd_list.argsort()[:n_para]
+        min_rmsd = [(r // nsteps, r % nsteps) for r in min_rmsd]
+        log[log_i,:] = [r[0] for r in min_rmsd]
+        cycle_step += 1
+        log_i += 1
 
-
-np.savetxt('log_0_100.csv', log, delimiter=',')
+    np.savetxt('log_0_100.csv', log, delimiter=',')
 
