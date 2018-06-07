@@ -1,7 +1,7 @@
 import numpy as np
-# from gromacs import tools
 import os, glob
 from multiprocessing import Pool
+from util import *
 
 def first_cycle(n):
     print(n)
@@ -22,47 +22,7 @@ def md_cycle(args):
     os.system('gmx_mpi mdrun -deffnm %s' % md)
     os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f %s.trr  -o rmsd_%d_%d.xvg -tu ns" % (md, step, n))
 
-def read_rmsd(step, n):
-    f = open('rmsd_%d_%d.xvg' % (step, n))
-    rmsd = []
-    while True:
-        l = f.readline()
-        if l[0] != '#' and l[0] != '@':
-            break
-    while l != '':
-        rmsd.append(l.split()[1])
-        l = f.readline()
-    f.close()
-    return rmsd
-
-def modify_rmsd(ip, op):
-    f = open(ip)
-    o = open(op, 'w')
-    while True:
-        l = f.readline()
-        if l[0] != '#' and l[0] != '@':
-            break
-        else:
-            o.write(l)
-
-    cum_time = 0.0
-    rmsd = l.split()[1]
-    o.write(str(cum_time) + "    " + str(rmsd) + "\n")
-    l = f.readline()
-    cum_time += 1.0
-
-    while l != '':
-        time = float(l.split()[0])
-        rmsd = l.split()[1]
-        if time != 0.0:
-            o.write(str(cum_time) + "    " + str(rmsd) + "\n")
-            cum_time += 1.0
-        l = f.readline()
-    f.close()
-    o.close()
-
-
-def pacs_md(MAX_CYCLE = 100, n_para = 5)
+def pacs_md(MAX_CYCLE = 100, n_para = 5):
     dt = 1 # ps for each step
     nsteps = 101 # number of steps for each md including inital state
     pass_flag = False
@@ -85,7 +45,7 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5)
             pass_flag = False
         rmsd_list = np.zeros(n_para * nsteps)
         for i in range(n_para):
-            rmsd_list[i * nsteps : (i+1) * nsteps] = read_rmsd(cycle_step, i)
+            rmsd_list[i * nsteps : (i+1) * nsteps] = read_rmsd('rmsd_%d_%d.xvg'%(cycle_step, i))
         min_rmsd = rmsd_list.argsort()[:n_para]
         min_rmsd = [(r // nsteps, r % nsteps) for r in min_rmsd]
         log[log_i,:] = [r[0] for r in min_rmsd]
@@ -94,7 +54,7 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5)
 
     np.savetxt('log_0_100.csv', log, delimiter=',')
 
-def cocat_traj():
+def concat_traj():
     log = np.loadtxt("log_0_100.csv", delimiter = ",")
     back_list = []
     step = log.shape[0] - 1
@@ -116,22 +76,26 @@ def cocat_traj():
 
     # print(traj_str)
     os.system( "gmx_mpi trjcat -f " + traj_str + " -o merged_pacs.trr ")
-    os.system("gmx_mpi rms -s 150l_npt.gro -f merged_pacs.trr -tu ns -o rmsd_merged_tmp.xvg")
+    os.system("echo 4 4| gmx_mpi rms -s target_npt.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
     modify_rmsd('rmsd_pacs_tmp.xvg', 'rmsd_pacs.xvg')
-    os.remove('rmsd_pacs_tmp.trr')
+    os.remove('rmsd_pacs_tmp.xvg')
 
 # 各ステップでのrmsdを記録
 def write_log(m):
-    o = open('min_rmsd.txt','w')
+    o = open('log_pacs.txt','w')
     for i in range(m):
-        rmsd = read_rmsd(i,0)
-        o.write(rmsd[0] + '\n')
+        rmsd = read_rmsd('rmsd_%d_%d.xvg'%(i,0))
+        o.write(str(rmsd[0]) + '\n')
     o.close()
 
 
-def main():
-    M = 100 # サイクル数
-    k = 5 # 並列数
-    pacs_md(M, k)
-    cancat_traj()
-    write_log(m)
+if __name__ == '__main__':
+    M = 3 # サイクル数
+    k = 2 # 並列数
+    # pacs_md(M, k)
+    concat_traj()
+    write_log(M)
+    for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("res_[0-9]*") + glob.glob("rmsd_[0-9]*")):
+        os.remove(file)    
+
+

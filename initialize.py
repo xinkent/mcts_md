@@ -1,5 +1,7 @@
-def initialize():
-    os.system('gmx_mpi pdb2gmx -f 1uao_unfold2.pdb -o 1uao_processed.gro -ignh -water spce -ff amber99sb')
+import os
+
+def initialize_reactant():
+    os.system('gmx_mpi pdb2gmx -f 1uao_unfold.pdb -o 1uao_processed.gro -ignh -water spce -ff amber99sb')
 
     # Set the simulation config
     os.system('gmx_mpi editconf -f 1uao_processed.gro -o 1uao_newbox.gro -c -d 1.0 -bt cubic')
@@ -46,3 +48,5 @@ def initialize_target():
     os.system('gmx_mpi grompp -f npt.mdp -c target_nvt.gro -p target_topol.top -o target_npt.tpr -r target_nvt.gro -maxwarn 5')
     os.system('gmx_mpi mdrun -deffnm target_npt')
 
+initialize_reactant()
+initialize_target()
