@@ -4,7 +4,7 @@ from multiprocessing import Pool
 from util import *
 
 def first_cycle(n):
-    print(n)
+    # print(n)
     os.system('gmx_mpi grompp -f md.mdp -c 0.gro -t 0.cpt -p topol.top -o md_0_%d.tpr -maxwarn 5' % n)
     os.system('gmx_mpi mdrun -deffnm md_0_%d' % n)
     os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f md_0_%d.trr  -o rmsd_0_%d.xvg -tu ns" % (n, n))
@@ -54,6 +54,7 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
 
     np.savetxt('log_0_100.csv', log, delimiter=',')
 
+# log.csvを元にshort MDのトラジェクリを繋げる
 def concat_traj():
     log = np.loadtxt("log_0_100.csv", delimiter = ",")
     back_list = []
@@ -69,12 +70,11 @@ def concat_traj():
         traj = "res_%d_%d"%(i,j)
         print(traj)
         trajs.append(traj)
-
     traj_str = ""
     for traj in trajs:
         traj_str += (traj + " ")
-
     # print(traj_str)
+
     os.system( "gmx_mpi trjcat -f " + traj_str + " -o merged_pacs.trr ")
     os.system("echo 4 4| gmx_mpi rms -s target_npt.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
     modify_rmsd('rmsd_pacs_tmp.xvg', 'rmsd_pacs.xvg')
@@ -92,7 +92,7 @@ def write_log(m):
 if __name__ == '__main__':
     M = 3 # サイクル数
     k = 2 # 並列数
-    # pacs_md(M, k)
+    pacs_md(M, k)
     concat_traj()
     write_log(M)
     for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("res_[0-9]*") + glob.glob("rmsd_[0-9]*")):
