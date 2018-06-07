@@ -1,5 +1,5 @@
 # mcts_md
-Python implementation for PACS_MD and MCDS_MD.
+Python implementation for PACS_MD and MCTS_MD.
 It uses GROMACS command for all of the manipulation　about MD simulation.
 The required version is GROMACS 2018.1.
 ## USAGE
