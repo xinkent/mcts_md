@@ -15,7 +15,7 @@ class Node:
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
-        self.c = 1/50 
+        self.c = 1/50
 
     def UCTSelectChild(self):
         s = sorted(self.childNodes, key = lambda c: c.rmsd/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
@@ -116,7 +116,7 @@ def UCT(rootstate, itermax, verbose = False):
         # if (verbose): ot.write(rootnode.TreeToString(0))
         # else: ot.write(rootnode.ChildrenToString())
     # return sorted(rootnode.childNodes, key = lambda c: c.visits)[-1].move # return the move that was most visited
-    
+
     trjs = ""
     node = max_node
     while True:
@@ -145,15 +145,13 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
     max_rmsd = -10000
     max_node    = rootnode
     o = open('log_prog.txt','w')
-    ot = open('tree_prog.txt','w')
     o.close()
     for i in range(itermax):
         o = open('log_prog.txt','a')
-        ot = open('tree_prog.txt', 'a')
         node = rootnode
         state = rootstate
         # Select
-        while (node.untriedMoves == 0 or node.prog_widenning) and node.childNodes != []: # node is fully expanded and non-terminal
+        while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # node is fully expanded and non-terminal
             node = node.UCTSelectChild()
             state = node.state
 
@@ -175,12 +173,7 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
-        if (verbose): ot.write(rootnode.TreeToString(0))
-        else: ot.write(rootnode.ChildrenToString())
-        ot.close()
-    # return sorted(rootnode.childNodes, key = lambda c: c.visits)[-1].move # return the move that was most visited
 
-    return
     trjs = ""
     node = max_node
     while True:
@@ -197,11 +190,11 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
     for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("rmsd_[0-9]*")):
         os.remove(file)
     # Output some information about the tree - can be omitted
+    ot = open('tree_prog.txt', 'a')
     if (verbose): ot.write(rootnode.TreeToString(0))
     else: ot.write(rootnode.ChildrenToString())
     ot.close()
 
- 
+
 if __name__ == "__main__":
     UCT(0,1000, verbose = True)
-    
