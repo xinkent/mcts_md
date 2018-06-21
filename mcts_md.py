@@ -4,7 +4,7 @@ from math import *
 from util import *
 import random
 
-MAX_child = 5
+MAX_child = 2
 
 class Node:
     def __init__(self, move = None, parent = None, state = None, depth = None):
@@ -15,7 +15,7 @@ class Node:
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
-        self.c = 1/50
+        self.c = 1/50 
 
     def UCTSelectChild(self):
         s = sorted(self.childNodes, key = lambda c: c.rmsd/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
@@ -40,7 +40,7 @@ class Node:
         else:
             os.system('gmx_mpi grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
         # os.system('gmx_mpi mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
-        os.system('mpirun -np 4 gmx_mpi mdrun -deffnm %s -dlb auto' % tmp)
+        os.system('gmx_mpi mdrun -deffnm %s -ntomp 20 -dlb auto -gpu_id 1' % tmp)
         os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         min_rmsd = np.min(rmsds)
@@ -116,7 +116,7 @@ def UCT(rootstate, itermax, verbose = False):
         # if (verbose): ot.write(rootnode.TreeToString(0))
         # else: ot.write(rootnode.ChildrenToString())
     # return sorted(rootnode.childNodes, key = lambda c: c.visits)[-1].move # return the move that was most visited
-
+    
     trjs = ""
     node = max_node
     while True:
@@ -128,7 +128,7 @@ def UCT(rootstate, itermax, verbose = False):
     o_trj.write(trjs)
     o_trj.close()
     os.system("gmx_mpi trjcat -f " + trjs + " -o merged_mcts.trr -cat")
-    os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f merged.trr -tu ns -o rmsd_mcts_tmp.xvg")
+    os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
     modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
     os.remove('rmsd_mcts_tmp.xvg')
     for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
@@ -145,14 +145,15 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
     max_rmsd = -10000
     max_node    = rootnode
     o = open('log_prog.txt','w')
+    ot = open('tree_prog.txt','w')
     o.close()
     for i in range(itermax):
         o = open('log_prog.txt','a')
+        ot = open('tree_prog.txt', 'a')
         node = rootnode
         state = rootstate
-
         # Select
-        while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # node is fully expanded and non-terminal
+        while (node.untriedMoves == 0 or node.prog_widenning) and node.childNodes != []: # node is fully expanded and non-terminal
             node = node.UCTSelectChild()
             state = node.state
 
@@ -164,7 +165,7 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
         # Backpropagate
         # result = -1 * node.MDrun()
-        result = -1 * np.random.randint(10)
+        result = get_random()
         if result > max_rmsd:
             max_rmsd = result
             max_node = node
@@ -174,8 +175,12 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
+        if (verbose): ot.write(rootnode.TreeToString(0))
+        else: ot.write(rootnode.ChildrenToString())
+        ot.close()
     # return sorted(rootnode.childNodes, key = lambda c: c.visits)[-1].move # return the move that was most visited
 
+    return
     trjs = ""
     node = max_node
     while True:
@@ -186,17 +191,17 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
     o_trj = open('trjs.txt', 'w')
     o_trj.write(trjs)
     o_trj.close()
-    os.system("gmx_mpi trjcat -f " + trjs + " -o merged.trr -cat")
-    os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f merged.trr -tu ns -o rmsd_merged_tmp.xvg")
-    modify_rmsd('rmsd_merged_tmp.xvg', 'merged_rmsd.xvg')
-    # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_*")):
-        # os.remove(file)
+    os.system("gmx_mpi trjcat -f " + trjs + " -o merged_mcts.trr -cat")
+    os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
+    modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
+    for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("rmsd_[0-9]*")):
+        os.remove(file)
     # Output some information about the tree - can be omitted
-    ot = open('tree_prog.txt', 'w')
     if (verbose): ot.write(rootnode.TreeToString(0))
     else: ot.write(rootnode.ChildrenToString())
     ot.close()
 
-
+ 
 if __name__ == "__main__":
-    UCT_progressive_widenning(0,100, verbose = True)
+    UCT(0,1000, verbose = True)
+    
