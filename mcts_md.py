@@ -5,6 +5,7 @@ from util import *
 import random
 from graphviz import Graph
 MAX_child = 3
+MAX_try = 10
 
 class Node:
     def __init__(self, move = None, parent = None, state = None, depth = None):
@@ -12,14 +13,17 @@ class Node:
         self.childNodes = []
         self.depth = 0
         self.rmsd_sum = 0
+        self.rmsd_max = -1000
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
         self.c = 1/50
         self.rmsd = 1000 # 仮．初期値に直そう
+        self.try_num = 0
 
     def UCTSelectChild(self):
-        s = sorted(self.childNodes, key = lambda c: c.rmsd_sum/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
+        # s = sorted(self.childNodes, key = lambda c: c.rmsd_sum/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
+        s = sorted(self.childNodes, key = lambda c: c.rmsd_max + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
         return s
 
     def MakeChild(self, s):
@@ -35,10 +39,13 @@ class Node:
     def Update(self, result):
         self.visits += 1
         self.rmsd_sum += result
+        if result > self.rmsd_max:
+            self.rmsd_max = result
 
     def MDrun(self):
         state = self.state
         pstate = self.parentNode.state
+        self.parentNode.try_num += 1
         tmp = str(state) + '_tmp'
         if pstate == 0:
             os.system('gmx_mpi grompp -f md.mdp -c 0_320.gro -t 0_320.cpt -p topol.top -o %s.tpr -maxwarn 5' % tmp)
@@ -97,7 +104,7 @@ def UCT(rootstate, itermax, verbose = False):
         node = rootnode
         state = rootstate
         # Select
-        while node.untriedMoves == 0 and node.childNodes != []: # node is fully expanded and non-terminal
+        while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
             node = node.UCTSelectChild()
             state = node.state
 
@@ -108,7 +115,7 @@ def UCT(rootstate, itermax, verbose = False):
         # node = node.AddChild(state) # add child and descend tree
         node = node.MakeChild(state)
         result = node.MDrun()
-        if result < parent_rmsd:
+        if result < parent_rmsd: # RMSDが減少した場合のみexpandする
             parent_node.AddChild(node)
             n_state += 1
 
