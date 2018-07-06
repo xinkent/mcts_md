@@ -163,7 +163,7 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
         # Backpropagate
         # result = -1 * node.MDrun()
-        result = get_random()
+        result = -1 * np.random.randint(10)
         if result > max_rmsd:
             max_rmsd = result
             max_node = node
@@ -173,7 +173,11 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
-
+    ot = open('tree_prog.txt', 'w')
+    if (verbose): ot.write(rootnode.TreeToString(0))
+    else: ot.write(rootnode.ChildrenToString())
+    ot.close()
+    return
     trjs = ""
     node = max_node
     while True:
@@ -197,4 +201,4 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
 
 if __name__ == "__main__":
-    UCT(0,1000, verbose = True)
+    UCT_progressive_widenning(0,100, verbose = True)
