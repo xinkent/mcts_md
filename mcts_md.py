@@ -5,29 +5,38 @@ from util import *
 import random
 from graphviz import Graph
 MAX_child = 3
-MAX_try = 10
+MAX_try = 6
 
 class Node:
-    def __init__(self, move = None, parent = None, state = None, depth = None):
+    def __init__(self, move = None, parent = None, state = None, depth = 0):
         self.parentNode = parent # "None" for the root node
         self.childNodes = []
-        self.depth = 0
+        self.depth = depth
+        self.child_depth = 0
         self.rmsd_sum = 0
         self.rmsd_max = -1000
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
         self.c = 1/50
+        self.alpha = 0.5
         self.rmsd = 1000 # 仮．初期値に直そう
         self.try_num = 0
 
     def UCTSelectChild(self):
-        # s = sorted(self.childNodes, key = lambda c: c.rmsd_sum/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
-        s = sorted(self.childNodes, key = lambda c: c.rmsd_max + self.c * sqrt(2*log(self.visits)/c.visits))[-1]
+        child_rmsds = [ch.rmsd_max for ch in self.childNodes]
+        rmsd_diff = max(child_rmsds) - min(child_rmsds)
+        child_depths = [ch.child_depth for ch in self.childNodes]
+        # depth_diff = max(child_depths) - min(child_depths)
+        c = rmsd_diff * self.alpha
+        # s = sorted(self.childNodes, key = lambda c: c.rmsd_sum/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
+        s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
+        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1] 
+        
         return s
 
-    def MakeChild(self, s):
-        n = Node(parent = self, state = s)
+    def MakeChild(self, s, d):
+        n = Node(parent = self, state = s, depth = d)
         return n
 
     def AddChild(self, n):
@@ -36,11 +45,13 @@ class Node:
         self.childNodes.append(n)
         return n
 
-    def Update(self, result):
+    def Update(self, result, d):
         self.visits += 1
         self.rmsd_sum += result
         if result > self.rmsd_max:
             self.rmsd_max = result
+        if d > self.child_depth:
+            self.child_depth = d
 
     def MDrun(self):
         state = self.state
@@ -53,12 +64,12 @@ class Node:
             os.system('gmx_mpi grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
         # os.system('gmx_mpi mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
         os.system('gmx_mpi mdrun -deffnm %s -ntomp 20 -dlb auto -gpu_id 1' % tmp)
-        os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
+        os.system("echo 4 4 | gmx_mpi rms -s 1l2y_model1.pdb -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
         os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
-        os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d' % (tmp, tmp, state, min_i))
+        os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
         for file in glob.glob("%s*" % tmp):
             os.remove(file)
         self.rmsd = min_rmsd
@@ -92,6 +103,18 @@ class Node:
         return s
 
 
+
+def adjascent_structure(nd, state): 
+    for ch in nd.childNodes:
+        os.system('echo 4 4 |gmx_mpi rms -s md_%s.gro -f md_%s.gro -o tmp_ad.xvg'%(ch.state, state))
+        rmsd_diff = np.array(read_rmsd('tmp_ad.xvg'))[0]
+        if rmsd_diff < 0.01:
+            return False
+        for file in (glob.glob("*#")):
+           os.remove(file)
+    return True
+
+
 def UCT(rootstate, itermax, verbose = False):
     rootnode = Node(state = rootstate)
     n_state = 0
@@ -99,8 +122,10 @@ def UCT(rootstate, itermax, verbose = False):
     max_node    = rootnode
     o = open('log_mcts.txt','w')
     o.close()
+    near_count = 0
     for i in range(itermax):
         o = open('log_mcts.txt','a')
+        n_o = open('near_count.txt', 'a')
         node = rootnode
         state = rootstate
         # Select
@@ -111,31 +136,37 @@ def UCT(rootstate, itermax, verbose = False):
         # Expand
         parent_node =node
         parent_rmsd = node.rmsd
+        parent_depth = node.depth
         state = n_state + 1
+        depth = parent_depth + 1
         # node = node.AddChild(state) # add child and descend tree
-        node = node.MakeChild(state)
+        node = node.MakeChild(s = state, d = depth)
         result = node.MDrun()
         if result < parent_rmsd: # RMSDが減少した場合のみexpandする
-            parent_node.AddChild(node)
-            n_state += 1
-
+            if adjascent_structure(parent_node, state):
+                parent_node.AddChild(node)
+                n_state += 1
+            else:
+                near_count += 1
+                n_o.write(str(near_count) + '\n')
+        n_o.close()
         # Backpropagate
         result = -1 * result
-        while node != None:
-            node.Update(result)
-            node = node.parentNode
         if result > max_rmsd:
             max_rmsd = result
             max_node = node
+        while node != None:
+            node.Update(result, depth)
+            node = node.parentNode
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
-        if i % 200 == 0:
+        if i % 10 == 0:
             G = Graph(format='png')
-            G.attr('node', shape='point')
+            G.attr('node', shape='circle')
             G.graph_attr.update(size="32")
             make_graph(G,rootnode)
-            G.render('tree_' + str(i) + 'epoch')
+            G.render('./tree/tree_' + str(i) + 'epoch')
         if max_rmsd > -0.1:
             break
 
@@ -143,6 +174,7 @@ def UCT(rootstate, itermax, verbose = False):
     trjs = ""
     node = max_node
     while True:
+        print(node.state)
         trjs = "md_" + str(node.state) + ".trr " + trjs
         node = node.parentNode
         if node.parentNode == None:
@@ -154,18 +186,18 @@ def UCT(rootstate, itermax, verbose = False):
     os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
     modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
     os.remove('rmsd_mcts_tmp.xvg')
-    for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
-        os.remove(file)
+    # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
+    #     os.remove(file)
     # Output some information about the tree - can be omitted
     ot = open('tree.txt','w')
     if (verbose): ot.write(rootnode.TreeToString(0))
     else: ot.write(rootnode.ChildrenToString())
     ot.close()
     G = Graph(format='png')
-    G.attr('node', shape='point')
+    G.attr('node', shape='circle')
     G.graph_attr.update(size="32")
     make_graph(G,rootnode)
-    G.render('mcts_tree')
+    G.render('./tree/mcts_tree')
 
 
 
@@ -232,7 +264,7 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
 def make_graph(G, nd):
     state = nd.state
-    G.node(str(state), str(state))
+    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits))
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state
@@ -241,5 +273,5 @@ def make_graph(G, nd):
         make_graph(G,child_node)
 
 if __name__ == "__main__":
-    UCT(0, 5000, verbose=True)
+    UCT(0, 20000, verbose=True)
     # UCT_progressive_widenning(0, 5000, verbose = True)
