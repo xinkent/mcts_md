@@ -19,7 +19,7 @@ class Node:
         self.state = state
         self.untriedMoves = MAX_child
         self.c = 1/50
-        self.alpha = 0.5
+        self.alpha = 1.0
         self.rmsd = 1000 # 仮．初期値に直そう
         self.try_num = 0
 
@@ -32,9 +32,18 @@ class Node:
         # s = sorted(self.childNodes, key = lambda c: c.rmsd_sum/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
         s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
         # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1] 
-        
         return s
-
+    
+    def CalcUCT(self):
+        pnd = self.parentNode
+        if pnd == None:
+            return -1
+        child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
+        rmsd_diff = max(child_rmsds) - min(child_rmsds)
+        c = rmsd_diff * self.alpha
+        uct = self.rmsd_max + c * sqrt(2*log(pnd.visits) / self.visits)
+        return uct
+        
     def MakeChild(self, s, d):
         n = Node(parent = self, state = s, depth = d)
         return n
@@ -44,6 +53,22 @@ class Node:
         self.untriedMoves -= 1
         self.childNodes.append(n)
         return n
+
+    def DeleteChild(self, n):
+        delete_i = -1
+        for ch_i, ch in enumerate(self.childNodes):
+            if ch.state == n.state:
+                delete_i = ch_i
+                break
+        self.childNodes.pop(delete_i)
+        self.untriedMoves += 1
+
+    def SearchMaxRmsd(self):
+        child_rmsds = [ch.rmsd_max for ch in self.childNodes]
+        if child_rmsds != []:
+            self.max_rmsd = max(child_rmsds)
+        else:
+            self.max_rmsd = -1000
 
     def Update(self, result, d):
         self.visits += 1
@@ -64,7 +89,7 @@ class Node:
             os.system('gmx_mpi grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
         # os.system('gmx_mpi mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
         os.system('gmx_mpi mdrun -deffnm %s -ntomp 20 -dlb auto -gpu_id 1' % tmp)
-        os.system("echo 4 4 | gmx_mpi rms -s 1l2y_model1.pdb -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
+        os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
@@ -104,11 +129,13 @@ class Node:
 
 
 
-def adjascent_structure(nd, state): 
-    for ch in nd.childNodes:
+def adjascent_structure(nd):
+    pnd = nd.parentNode 
+    state = nd.state
+    for ch in pnd.childNodes:
         os.system('echo 4 4 |gmx_mpi rms -s md_%s.gro -f md_%s.gro -o tmp_ad.xvg'%(ch.state, state))
         rmsd_diff = np.array(read_rmsd('tmp_ad.xvg'))[0]
-        if rmsd_diff < 0.01:
+        if rmsd_diff < 0.005 and ch.rmsd < nd.rmsd:
             return False
         for file in (glob.glob("*#")):
            os.remove(file)
@@ -128,6 +155,7 @@ def UCT(rootstate, itermax, verbose = False):
         n_o = open('near_count.txt', 'a')
         node = rootnode
         state = rootstate
+        flag = 0
         # Select
         while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
             node = node.UCTSelectChild()
@@ -143,12 +171,16 @@ def UCT(rootstate, itermax, verbose = False):
         node = node.MakeChild(s = state, d = depth)
         result = node.MDrun()
         if result < parent_rmsd: # RMSDが減少した場合のみexpandする
-            if adjascent_structure(parent_node, state):
+            if adjascent_structure(node):
                 parent_node.AddChild(node)
                 n_state += 1
             else:
                 near_count += 1
                 n_o.write(str(near_count) + '\n')
+        # MAX_tryやっても追加されない場合は枝を刈り取る
+        else:
+            flag = 1
+            
         n_o.close()
         # Backpropagate
         result = -1 * result
@@ -158,6 +190,16 @@ def UCT(rootstate, itermax, verbose = False):
         while node != None:
             node.Update(result, depth)
             node = node.parentNode
+
+        if flag == 1:
+            tmp_node = parent_node
+            while tmp_node.try_num >= MAX_try and tmp_node.childNodes == []:
+                tmp_parent = tmp_node.parentNode
+                if tmp_parent == None:
+                    break
+                tmp_parent.DeleteChild(tmp_node)
+                tmp_parent.SearchMaxRmsd()
+                tmp_node = tmp_parent
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
@@ -264,7 +306,8 @@ def UCT_progressive_widenning(rootstate, itermax, verbose = False):
 
 def make_graph(G, nd):
     state = nd.state
-    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits))
+    uct = nd.CalcUCT()
+    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct))
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state
