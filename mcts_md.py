@@ -5,7 +5,8 @@ from util import *
 import random
 from graphviz import Graph
 MAX_child = 3
-MAX_try = 6
+MAX_try = 3
+rmsd_list = []
 
 class Node:
     def __init__(self, move = None, parent = None, state = None, depth = 0):
@@ -18,8 +19,8 @@ class Node:
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
-        self.c = 1/50
-        self.alpha = 1.0
+        self.c = 1/30
+        self.alpha = 1.5
         self.rmsd = 1000 # 仮．初期値に直そう
         self.try_num = 0
 
@@ -29,8 +30,8 @@ class Node:
         child_depths = [ch.child_depth for ch in self.childNodes]
         # depth_diff = max(child_depths) - min(child_depths)
         c = rmsd_diff * self.alpha
-        # s = sorted(self.childNodes, key = lambda c: c.rmsd_sum/c.visits + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
-        s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
+        s = sorted(self.childNodes, key = lambda c: c.rmsd_max + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
+        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
         # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
     
@@ -41,7 +42,7 @@ class Node:
         child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
         rmsd_diff = max(child_rmsds) - min(child_rmsds)
         c = rmsd_diff * self.alpha
-        uct = self.rmsd_max + c * sqrt(2*log(pnd.visits) / self.visits)
+        uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
         return uct
         
     def MakeChild(self, s, d):
@@ -128,19 +129,20 @@ class Node:
         return s
 
 
-
-def adjascent_structure(nd):
-    pnd = nd.parentNode 
-    state = nd.state
-    for ch in pnd.childNodes:
-        os.system('echo 4 4 |gmx_mpi rms -s md_%s.gro -f md_%s.gro -o tmp_ad.xvg'%(ch.state, state))
-        rmsd_diff = np.array(read_rmsd('tmp_ad.xvg'))[0]
-        if rmsd_diff < 0.005 and ch.rmsd < nd.rmsd:
-            return False
-        for file in (glob.glob("*#")):
-           os.remove(file)
-    return True
-
+# 類似構造でかつ、rmsdが小さい構造がすでにある場合はFalse
+def check_similarity(nd):
+    if nd.state == 1:
+        return True
+    os.system('echo 4 4 |gmx_mpi rms -s md_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
+    rmsd_tmp = np.array(read_rmsd('rmsd_tmp.xvg'))
+    print(rmsd_list)
+    for file in glob.glob("*#"):
+        os.remove(file)
+    if any((rmsd_tmp < 0.1) & (np.array(rmsd_list) < nd.rmsd)):
+        return False
+    else:
+        return True
+ 
 
 def UCT(rootstate, itermax, verbose = False):
     rootnode = Node(state = rootstate)
@@ -149,7 +151,6 @@ def UCT(rootstate, itermax, verbose = False):
     max_node    = rootnode
     o = open('log_mcts.txt','w')
     o.close()
-    near_count = 0
     for i in range(itermax):
         o = open('log_mcts.txt','a')
         n_o = open('near_count.txt', 'a')
@@ -171,12 +172,13 @@ def UCT(rootstate, itermax, verbose = False):
         node = node.MakeChild(s = state, d = depth)
         result = node.MDrun()
         if result < parent_rmsd: # RMSDが減少した場合のみexpandする
-            if adjascent_structure(node):
+            if check_similarity(node):
                 parent_node.AddChild(node)
+                os.system('cat md_%s.gro >> all_structure.gro'%state) # 構造を保存
+                rmsd_list.append(result) # RMSDを保存
                 n_state += 1
             else:
-                near_count += 1
-                n_o.write(str(near_count) + '\n')
+                n_o.write(str(state) + '\n')
         # MAX_tryやっても追加されない場合は枝を刈り取る
         else:
             flag = 1
@@ -191,22 +193,22 @@ def UCT(rootstate, itermax, verbose = False):
             node.Update(result, depth)
             node = node.parentNode
 
-        if flag == 1:
-            tmp_node = parent_node
-            while tmp_node.try_num >= MAX_try and tmp_node.childNodes == []:
-                tmp_parent = tmp_node.parentNode
-                if tmp_parent == None:
-                    break
-                tmp_parent.DeleteChild(tmp_node)
-                tmp_parent.SearchMaxRmsd()
-                tmp_node = tmp_parent
+        # if flag == 1:
+        #     tmp_node = parent_node
+        #     while tmp_node.try_num >= MAX_try and tmp_node.childNodes == []:
+        #         tmp_parent = tmp_node.parentNode
+        #         if tmp_parent == None:
+        #             break
+        #         tmp_parent.DeleteChild(tmp_node)
+        #         tmp_parent.SearchMaxRmsd()
+        #         tmp_node = tmp_parent
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
         if i % 10 == 0:
             G = Graph(format='png')
             G.attr('node', shape='circle')
-            G.graph_attr.update(size="32")
+            G.graph_attr.update(size="1200")
             make_graph(G,rootnode)
             G.render('./tree/tree_' + str(i) + 'epoch')
         if max_rmsd > -0.1:
@@ -237,7 +239,7 @@ def UCT(rootstate, itermax, verbose = False):
     ot.close()
     G = Graph(format='png')
     G.attr('node', shape='circle')
-    G.graph_attr.update(size="32")
+    G.graph_attr.update(size="1200")
     make_graph(G,rootnode)
     G.render('./tree/mcts_tree')
 
