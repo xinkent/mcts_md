@@ -16,6 +16,7 @@ class Node:
         self.child_depth = 0
         self.rmsd_sum = 0
         self.rmsd_max = -1000
+        self.rmsd_depth_dict = {}
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
@@ -32,9 +33,15 @@ class Node:
         c = rmsd_diff * self.alpha
         s = sorted(self.childNodes, key = lambda c: c.rmsd_max + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
         # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
-        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1] 
+        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1]
         return s
-    
+
+    def UCTSelectChildByDepth(self):
+        child_depths = [ch.child_depth for ch in self.childNodes]
+        min_depth = min(child_depths)
+        s = sorted(self.childNodes, key = lambda c: self.rmsd_depth_dict[min_depth] + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
+        return s
+
     def CalcUCT(self):
         pnd = self.parentNode
         if pnd == None:
@@ -44,7 +51,7 @@ class Node:
         c = rmsd_diff * self.alpha
         uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
         return uct
-        
+
     def MakeChild(self, s, d):
         n = Node(parent = self, state = s, depth = d)
         return n
@@ -78,6 +85,10 @@ class Node:
             self.rmsd_max = result
         if d > self.child_depth:
             self.child_depth = d
+            self.rmsd_depth_dict[d] == result
+        else:
+            if result > self.rmsd_depth_dict[d]:
+                self.rmsd_depth_dict[d] == result
 
     def MDrun(self):
         state = self.state
@@ -99,6 +110,7 @@ class Node:
         for file in glob.glob("%s*" % tmp):
             os.remove(file)
         self.rmsd = min_rmsd
+        self.rmsd_depth_dict[self.depth] = min_rmsd
         return min_rmsd
 
     def prog_widenning(self):
@@ -142,7 +154,7 @@ def check_similarity(nd):
         return False
     else:
         return True
- 
+
 
 def UCT(rootstate, itermax, verbose = False):
     rootnode = Node(state = rootstate)
@@ -158,8 +170,9 @@ def UCT(rootstate, itermax, verbose = False):
         state = rootstate
         flag = 0
         # Select
+        # while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # progressive widennning
         while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
-            node = node.UCTSelectChild()
+            node = node.UCTSelectChildByDepth()
             state = node.state
 
         # Expand
@@ -182,7 +195,7 @@ def UCT(rootstate, itermax, verbose = False):
         # MAX_tryやっても追加されない場合は枝を刈り取る
         else:
             flag = 1
-            
+
         n_o.close()
         # Backpropagate
         result = -1 * result
@@ -243,67 +256,6 @@ def UCT(rootstate, itermax, verbose = False):
     make_graph(G,rootnode)
     G.render('./tree/mcts_tree')
 
-
-
-def UCT_progressive_widenning(rootstate, itermax, verbose = False):
-    rootnode = Node(state = rootstate)
-    n_state = 0
-    max_rmsd = -10000
-    max_node    = rootnode
-    o = open('log_prog.txt','w')
-    o.close()
-    for i in range(itermax):
-        o = open('log_prog.txt','a')
-        node = rootnode
-        state = rootstate
-        # Select
-        while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # node is fully expanded and non-terminal
-            node = node.UCTSelectChild()
-            state = node.state
-
-        # Expand
-        if node.untriedMoves != 0: # if we can expand (i.e. state/node is non-terminal)
-            state = n_state + 1
-            node = node.AddChild(state) # add child and descend tree
-            n_state += 1
-
-        # Backpropagate
-        # result = -1 * node.MDrun()
-        result = np.random.randint(10)
-        if result > max_rmsd:
-            max_rmsd = result
-            max_node = node
-        while node != None: # backpropagate from the expanded node and work back to the root node
-            node.Update(result) # state is terminal. Update node with result from POV of node.playerJustMoved
-            node = node.parentNode
-
-        o.write(str(-1 * max_rmsd) + '\n')
-        o.close()
-    ot = open('tree_prog.txt', 'w')
-    if (verbose): ot.write(rootnode.TreeToString(0))
-    else: ot.write(rootnode.ChildrenToString())
-    ot.close()
-    return
-    trjs = ""
-    node = max_node
-    while True:
-        trjs = "md_" + str(node.state) + ".trr " + trjs
-        node = node.parentNode
-        if node.parentNode == None:
-            break
-    o_trj = open('trjs.txt', 'w')
-    o_trj.write(trjs)
-    o_trj.close()
-    os.system("gmx_mpi trjcat -f " + trjs + " -o merged_mcts.trr -cat")
-    os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
-    modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
-    for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("rmsd_[0-9]*")):
-        os.remove(file)
-    # Output some information about the tree - can be omitted
-    ot = open('tree_prog.txt', 'w')
-    if (verbose): ot.write(rootnode.TreeToString(0))
-    else: ot.write(rootnode.ChildrenToString())
-    ot.close()
 
 
 def make_graph(G, nd):
