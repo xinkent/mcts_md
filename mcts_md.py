@@ -3,6 +3,7 @@ import os, glob
 from math import *
 from util import *
 import random
+import copy
 from graphviz import Graph
 MAX_child = 3
 MAX_try = 3
@@ -20,7 +21,7 @@ class Node:
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
-        self.c = 1/30
+        self.c = 1/50
         self.alpha = 1.5
         self.rmsd = 1000 # 仮．初期値に直そう
         self.try_num = 0
@@ -37,19 +38,32 @@ class Node:
         return s
 
     def UCTSelectChildByDepth(self):
-        child_depths = [ch.child_depth for ch in self.childNodes]
-        min_depth = min(child_depths)
-        s = sorted(self.childNodes, key = lambda c: self.rmsd_depth_dict[min_depth] + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
-        return s
+        node_idx = np.arange(len(self.childNodes))
+        while True:
+            print('node_idx  ' + str(node_idx))
+            child_depths = np.array([self.childNodes[idx].child_depth for idx in node_idx])
+            min_depth = min(child_depths)
+            min_depth_idx = np.where(child_depths == min(child_depths))[0]
+            ucts = [self.childNodes[idx].rmsd_depth_dict[min_depth] + self.c * sqrt(2*log(self.visits)/self.childNodes[idx].visits) for idx in node_idx]
+            max_uct_idx = np.argmax(ucts)
+            if max_uct_idx in  min_depth_idx:
+                return self.childNodes[node_idx[max_uct_idx]]
+            else:
+                node_idx = np.delete(node_idx, min_depth_idx)
+
 
     def CalcUCT(self):
         pnd = self.parentNode
         if pnd == None:
             return -1
         child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
-        rmsd_diff = max(child_rmsds) - min(child_rmsds)
-        c = rmsd_diff * self.alpha
-        uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
+        child_depths = [ch.child_depth for ch in pnd.childNodes]
+        min_depth = min(child_depths)
+
+        # rmsd_diff = max(child_rmsds) - min(child_rmsds)
+        # c = rmsd_diff * self.alpha
+        # uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
+        uct = self.rmsd_depth_dict[min_depth] + self.c * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
     def MakeChild(self, s, d):
@@ -69,7 +83,7 @@ class Node:
                 delete_i = ch_i
                 break
         self.childNodes.pop(delete_i)
-        self.untriedMoves += 1
+        # self.untriedMoves += 1
 
     def SearchMaxRmsd(self):
         child_rmsds = [ch.rmsd_max for ch in self.childNodes]
@@ -85,10 +99,10 @@ class Node:
             self.rmsd_max = result
         if d > self.child_depth:
             self.child_depth = d
-            self.rmsd_depth_dict[d] == result
+            self.rmsd_depth_dict[d] = result
         else:
             if result > self.rmsd_depth_dict[d]:
-                self.rmsd_depth_dict[d] == result
+                self.rmsd_depth_dict[d] = result
 
     def MDrun(self):
         state = self.state
@@ -100,7 +114,7 @@ class Node:
         else:
             os.system('gmx_mpi grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
         # os.system('gmx_mpi mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
-        os.system('gmx_mpi mdrun -deffnm %s -ntomp 20 -dlb auto -gpu_id 1' % tmp)
+        os.system('gmx_mpi mdrun -deffnm %s -ntomp 20 -dlb auto -gpu_id 0123' % tmp)
         os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         min_rmsd = np.min(rmsds)
@@ -261,7 +275,7 @@ def UCT(rootstate, itermax, verbose = False):
 def make_graph(G, nd):
     state = nd.state
     uct = nd.CalcUCT()
-    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct))
+    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(nd.child_depth) + '\n' + str(uct))
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state
@@ -270,5 +284,6 @@ def make_graph(G, nd):
         make_graph(G,child_node)
 
 if __name__ == "__main__":
+    os.system('rm all_structure.gro')
     UCT(0, 20000, verbose=True)
     # UCT_progressive_widenning(0, 5000, verbose = True)
