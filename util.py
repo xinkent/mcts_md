@@ -41,7 +41,7 @@ def modify_rmsd(ip, op):
     f.close()
     o.close()
 
-def make_tree_pacs(log_file)
+def make_tree_pacs(log_file):
     log = pd.read_csv(log_file, header = None)
     log = np.array(log)
     G = Graph(format='svg')
@@ -51,13 +51,12 @@ def make_tree_pacs(log_file)
     G.node('0-0', '0-0')
     state += 1
     for i in range(len(log)):
-	log_i = log[i]
-	for j, l in enumerate(log_i):
-	    state = str(i + 1) + '-' + str(j)
-	    pstate = str(i) + '-' + str(int(l))
-	    print(state, pstate)
-	    G.node(state, state)
-	    G.edge(pstate, state)
+        log_i = log[i]
+        for j, l in enumerate(log_i):
+            state = str(i + 1) + '-' + str(j)
+            pstate = str(i) + '-' + str(int(l))
+            G.node(state, state)
+            G.edge(pstate, state)
     G.render('tree_pacs')
 
 
