@@ -1,3 +1,7 @@
+import numpy as np
+import pandas as pd
+from graphviz import Graph
+
 def read_rmsd(name):
     f = open(name)
     rmsd = []
@@ -36,5 +40,24 @@ def modify_rmsd(ip, op):
         l = f.readline()
     f.close()
     o.close()
+
+def make_tree_pacs(log_file)
+    log = pd.read_csv(log_file, header = None)
+    log = np.array(log)
+    G = Graph(format='svg')
+    G.attr('node', shape='circle')
+    G.graph_attr.update(size="320")
+    state = 0
+    G.node('0-0', '0-0')
+    state += 1
+    for i in range(len(log)):
+	log_i = log[i]
+	for j, l in enumerate(log_i):
+	    state = str(i + 1) + '-' + str(j)
+	    pstate = str(i) + '-' + str(int(l))
+	    print(state, pstate)
+	    G.node(state, state)
+	    G.edge(pstate, state)
+    G.render('tree_pacs')
 
 
