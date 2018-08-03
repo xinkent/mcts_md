@@ -172,7 +172,7 @@ def UCT(rootstate, itermax, verbose = False):
         # Select
         # while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # progressive widennning
         while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
-            node = node.UCTSelectChildByDepth()
+            node = node.UCTSelectChildByDepthいk()
             state = node.state
 
         # Expand
