@@ -130,30 +130,6 @@ class Node:
     def prog_widenning(self):
         return sqrt(self.visits) < (3/2) * len(self.childNodes)
 
-    def __repr__(self):
-        if self.parentNode == None:
-                return "[S:" + str(self.state)  + " W/V:" + str(self.rmsd_sum) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
-        else:
-            return "[S:" + str(self.state) + "  UCT:" + str(self.rmsd_sum/self.visits + self.c * sqrt(2 * log(self.parentNode.visits)/self.visits)) + " W/V:" + str(self.rmsd) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
-
-    def TreeToString(self, indent):
-        s = self.IndentString(indent) + str(self)
-        for c in self.childNodes:
-             s += c.TreeToString(indent+1)
-        return s
-
-    def IndentString(self,indent):
-        s = "\n"
-        for i in range (1,indent+1):
-            s += "| "
-        return s
-
-    def ChildrenToString(self):
-        s = ""
-        for c in self.childNodes:
-             s += str(c) + "\n"
-        return s
-
 
 # 類似構造でかつ、rmsdが小さい構造がすでにある場合はFalse
 def check_similarity(nd):
@@ -260,11 +236,6 @@ def UCT(rootstate, itermax, verbose = False):
     os.remove('rmsd_mcts_tmp.xvg')
     # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
     #     os.remove(file)
-    # Output some information about the tree - can be omitted
-    ot = open('tree.txt','w')
-    if (verbose): ot.write(rootnode.TreeToString(0))
-    else: ot.write(rootnode.ChildrenToString())
-    ot.close()
     G = Graph(format='svg')
     G.attr('node', shape='circle')
     G.graph_attr.update(size="1200")
