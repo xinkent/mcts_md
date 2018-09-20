@@ -117,6 +117,13 @@ class Node:
         os.system('gmx mdrun -deffnm %s -ntmpi 1 -ntomp 6 -dlb auto -gpu_id 0' % tmp)
         os.system("echo 4 4 | gmx rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
+        # 初期RMSDを書き込み
+        if pstate == 0:
+            first_rmsd = rmsds[0]
+            o = open('log_mcts.txt','w')
+            o.write(str(first_rmsd) + '\n')
+            o.close()
+       
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
