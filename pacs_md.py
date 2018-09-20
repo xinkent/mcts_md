@@ -5,22 +5,25 @@ from util import *
 
 def first_cycle(n):
     # print(n)
-    os.system('gmx_mpi grompp -f md.mdp -c 0.gro -t 0.cpt -p topol.top -o md_0_%d.tpr -maxwarn 5' % n)
-    os.system('gmx_mpi mdrun -deffnm md_0_%d' % n)
-    os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f md_0_%d.trr  -o rmsd_0_%d.xvg -tu ns" % (n, n))
+    os.system('gmx grompp -f md.mdp -c 0.gro -t 0.cpt -p topol.top -o md_0_%d.tpr -maxwarn 5' % n)
+    os.system('gmx mdrun -deffnm md_0_%d' % n)
+    os.system("echo 4 4 | gmx rms -s target_processed.gro -f md_0_%d.trr  -o rmsd_0_%d.xvg -tu ns" % (n, n))
 
 def md_cycle(args):
     step = args[0]
     n = args[1]
     md_ind = args[2]
+    last = args[3]
     input  = 'md_%d_%d' % (step-1, md_ind[0])
-    temp = 'res_%d_%d' % (step-1, n)
-    md    = 'md_%d_%d' % (step, n)
-    os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o %s.trr -e %d' % (input, input, temp, md_ind[1]))
-    os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o %s.gro -e %d' % (input, input, temp, md_ind[1]))
-    os.system('gmx_mpi grompp -f md.mdp -t %s.trr -o %s.tpr -c %s.gro -maxwarn 5' %(temp, md, temp))
-    os.system('gmx_mpi mdrun -deffnm %s' % md)
-    os.system("echo 4 4 | gmx_mpi rms -s target_npt.gro -f %s.trr  -o rmsd_%d_%d.xvg -tu ns" % (md, step, n))
+    temp   = 'res_%d_%d' % (step-1, n)
+    md     = 'md_%d_%d' % (step, n)
+    rmsd   = 'rmsd_%d_%d' % (step, n)
+    os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o %s.trr -e %d' % (input, input, temp, md_ind[1]))
+    os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o %s.gro -e %d' % (input, input, temp, md_ind[1]))
+    if not last:
+        os.system('gmx grompp -f md.mdp -t %s.trr -o %s.tpr -c %s.gro -maxwarn 5' %(temp, md, temp))
+        os.system('gmx mdrun -deffnm %s' % md)
+        os.system("echo 4 4 | gmx rms -s target_processed.gro -f %s.trr  -o %s.xvg -tu ns" % (md, rmsd))
 
 def pacs_md(MAX_CYCLE = 100, n_para = 5):
     dt = 1 # ps for each step
@@ -40,7 +43,7 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
                     first_cycle(i)
             else:
                 for i in range(n_para):
-                    md_cycle([cycle_step, i, min_rmsd[i]])
+                    md_cycle([cycle_step, i, min_rmsd[i],False])
         else:
             pass_flag = False
         rmsd_list = np.zeros(n_para * nsteps)
@@ -52,12 +55,14 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
         cycle_step += 1
         log_i += 1
 
+    for i in range(n_para):
+        md_cycle([cycle_step, i, min_rmsd[i],True])
     np.savetxt('log_0_100.csv', log, delimiter=',')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
 def concat_traj():
     log = np.loadtxt("log_0_100.csv", delimiter = ",")
-    back_list = []
+    back_list = [0]
     step = log.shape[0] - 1
     log_index = 0
 
@@ -75,8 +80,8 @@ def concat_traj():
         traj_str += (traj + " ")
     # print(traj_str)
 
-    os.system( "gmx_mpi trjcat -f " + traj_str + " -o merged_pacs.trr ")
-    os.system("echo 4 4| gmx_mpi rms -s target_npt.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
+    os.system( "gmx trjcat -f " + traj_str + " -o merged_pacs.trr -cat")
+    os.system("echo 4 4| gmx rms -s target_processed.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
     modify_rmsd('rmsd_pacs_tmp.xvg', 'rmsd_pacs.xvg')
     os.remove('rmsd_pacs_tmp.xvg')
 
@@ -90,12 +95,12 @@ def write_log(m):
 
 
 if __name__ == '__main__':
-    M = 3 # サイクル数
-    k = 2 # 並列数
+    M = 4 # サイクル数
+    k = 3 # 並列数
     pacs_md(M, k)
     concat_traj()
     write_log(M)
-    for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("res_[0-9]*") + glob.glob("rmsd_[0-9]*")):
-        os.remove(file)    
+    # for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("res_[0-9]*") + glob.glob("rmsd_[0-9]*")):
+    #     os.remove(file)    
 
 
