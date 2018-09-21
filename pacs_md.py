@@ -31,18 +31,19 @@ def md_cycle(args):
 
 def pacs_md(MAX_CYCLE = 100, n_para = 5):
     dt = 1 # ps for each step
-    nsteps = 101 # number of steps for each md including inital state
+    nsteps = 101 # ショートMDのステップ数+1(時刻0を含む) 
     pass_flag = False 
     cycle_step = 0
-    edge_log = np.zeros((MAX_CYCLE - cycle_step, n_para))  # Treeの遷移関係のlog
+    edge_log = []  # Treeの遷移関係のlog
     log_i = 0
     o = open('log_pacs.txt','w')
     o.close()
+    min_rmsd = 10000 # 初期値
     # 途中(100回目)から再開する場合
     # pass_flag = True
     # cycle_step = 100
 
-    while cycle_step < MAX_CYCLE or min_rmsd < MIN_RMSD:
+    while cycle_step < MAX_CYCLE and min_rmsd >= MIN_RMSD:
         if not pass_flag:
             if cycle_step == 0:
                 for i in range(n_para):
@@ -58,22 +59,23 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
             rmsd_list[i * nsteps : (i+1) * nsteps] = read_rmsd('rmsd_%d_%d.xvg'%(cycle_step, i))
         min_rmsd = min(rmsd_list)
        
-        if cycle_step = 0:
+        if cycle_step == 0:
             first_rmsd = rmsd_list[0]
             write_log(first_rmsd)
         write_log(min_rmsd)
         # Treeの遷移関係を記録
         min_rmsd_idx = rmsd_list.argsort()[:n_para]
         min_rmsd_idx = [(r // nsteps, r % nsteps) for r in min_rmsd_idx]
-        edge_log[log_i,:] = [r[0] for r in min_rmsd_idx]
+        edge_log.append([r[0] for r in min_rmsd_idx])
         
         cycle_step += 1
         log_i += 1
     
-    # logをファイルに保存(concat_traj)に渡す
+    # 最後のMDのトラジェクリについて切り取り処理をする
     for i in range(n_para):
         md_cycle([cycle_step, i, min_rmsd_idx[i],True])
-    np.savetxt('edge_log.csv', edge_log, delimiter=',')
+    # logをファイルに保存(concat_traj)に渡す
+    np.savetxt('edge_log.csv', np.array(edge_log), delimiter=',')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
 def concat_traj():
@@ -113,7 +115,7 @@ if __name__ == '__main__':
     k = 3 # 並列数
     pacs_md(M, k)
     concat_traj()
-    write_log(M)
+    make_tree_pacs('edge_log.csv')
     # for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("res_[0-9]*") + glob.glob("rmsd_[0-9]*")):
     #     os.remove(file)    
 
