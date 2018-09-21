@@ -8,7 +8,7 @@ MIN_RMSD = 0.1
 def first_cycle(n):
     # print(n)
     os.system('gmx grompp -f md.mdp -c 0.gro -t 0.cpt -p topol.top -o md_0_%d.tpr -maxwarn 5' % n)
-    os.system('gmx mdrun -deffnm md_0_%d' % n)
+    os.system('gmx mdrun -deffnm md_0_%d -ntmpi 1 -ntomp 10 -dlb auto' % n)
     os.system("echo 4 4 | gmx rms -s target_processed.gro -f md_0_%d.trr  -o rmsd_0_%d.xvg -tu ns" % (n, n))
 
 def md_cycle(args):
@@ -26,7 +26,7 @@ def md_cycle(args):
     # 切り取った箇所から新たにMD
     if not last:
         os.system('gmx grompp -f md.mdp -t %s.trr -o %s.tpr -c %s.gro -maxwarn 5' %(temp, md, temp))
-        os.system('gmx mdrun -deffnm %s' % md)
+        os.system('gmx mdrun -deffnm %s -ntmpi 1 -ntomp 10 -dlb auto' % md)
         os.system("echo 4 4 | gmx rms -s target_processed.gro -f %s.trr  -o %s.xvg -tu ns" % (md, rmsd))
 
 def pacs_md(MAX_CYCLE = 100, n_para = 5):
@@ -70,7 +70,11 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
         
         cycle_step += 1
         log_i += 1
-    
+        
+        # 不要なファイルを削除        
+        for file in glob.glob('md_[0-9]*') + glob.glob("*#"):
+            os.remove(file)
+
     # 最後のMDのトラジェクリについて切り取り処理をする
     for i in range(n_para):
         md_cycle([cycle_step, i, min_rmsd_idx[i],True])
@@ -111,8 +115,8 @@ def write_log(rmsd):
 
 
 if __name__ == '__main__':
-    M = 4 # サイクル数
-    k = 3 # 並列数
+    M = 1000 # サイクル数
+    k = 5 # 並列数
     pacs_md(M, k)
     concat_traj()
     make_tree_pacs('edge_log.csv')
