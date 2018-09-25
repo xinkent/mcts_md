@@ -21,7 +21,7 @@ class Node:
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
-        self.c = 1/50
+        self.c = 0.02
         self.alpha = 1.5
         self.rmsd = 1000 # 仮．初期値に直そう
         self.try_num = 0
@@ -110,18 +110,25 @@ class Node:
         self.parentNode.try_num += 1
         tmp = str(state) + '_tmp'
         if pstate == 0:
-            os.system('gmx_mpi grompp -f md.mdp -c 0_320.gro -t 0_320.cpt -p topol.top -o %s.tpr -maxwarn 5' % tmp)
+            os.system('gmx grompp -f md.mdp -c 0_320.gro -t 0_320.cpt -p topol.top -o %s.tpr -maxwarn 5' % tmp)
         else:
-            os.system('gmx_mpi grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
-        # os.system('gmx_mpi mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
-        os.system('gmx_mpi mdrun -deffnm %s -ntomp 20 -dlb auto -gpu_id 0123' % tmp)
-        os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
+            os.system('gmx grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
+        # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
+        os.system('gmx mdrun -deffnm %s -ntmpi 1 -ntomp 6 -dlb auto -gpu_id 0' % tmp)
+        os.system("echo 4 4 | gmx rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
+        # 初期RMSDを書き込み
+        if pstate == 0:
+            first_rmsd = rmsds[0]
+            o = open('log_mcts.txt','w')
+            o.write(str(first_rmsd) + '\n')
+            o.close()
+       
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
-        os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
-        os.system('echo 0 | gmx_mpi trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
-        for file in glob.glob("%s*" % tmp):
+        os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
+        os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
+        for file in glob.glob("%s*" % tmp) + glob.glob("*#"):
             os.remove(file)
         self.rmsd = min_rmsd
         self.rmsd_depth_dict[self.depth] = min_rmsd
@@ -130,41 +137,17 @@ class Node:
     def prog_widenning(self):
         return sqrt(self.visits) < (3/2) * len(self.childNodes)
 
-    def __repr__(self):
-        if self.parentNode == None:
-                return "[S:" + str(self.state)  + " W/V:" + str(self.rmsd_sum) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
-        else:
-            return "[S:" + str(self.state) + "  UCT:" + str(self.rmsd_sum/self.visits + self.c * sqrt(2 * log(self.parentNode.visits)/self.visits)) + " W/V:" + str(self.rmsd) + "/" + str(self.visits) + " U:" + str(self.untriedMoves) + "]"
-
-    def TreeToString(self, indent):
-        s = self.IndentString(indent) + str(self)
-        for c in self.childNodes:
-             s += c.TreeToString(indent+1)
-        return s
-
-    def IndentString(self,indent):
-        s = "\n"
-        for i in range (1,indent+1):
-            s += "| "
-        return s
-
-    def ChildrenToString(self):
-        s = ""
-        for c in self.childNodes:
-             s += str(c) + "\n"
-        return s
-
 
 # 類似構造でかつ、rmsdが小さい構造がすでにある場合はFalse
 def check_similarity(nd):
     if nd.state == 1:
         return True
-    os.system('echo 4 4 |gmx_mpi rms -s md_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
+    os.system('echo 4 4 |gmx rms -s md_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
     rmsd_tmp = np.array(read_rmsd('rmsd_tmp.xvg'))
     print(rmsd_list)
     for file in glob.glob("*#"):
         os.remove(file)
-    if any((rmsd_tmp < 0.1) & (np.array(rmsd_list) < nd.rmsd)):
+    if any((rmsd_tmp < 0.05) & (np.array(rmsd_list) < nd.rmsd)):
         return False
     else:
         return True
@@ -186,7 +169,8 @@ def UCT(rootstate, itermax, verbose = False):
         # Select
         # while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # progressive widennning
         while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
-            node = node.UCTSelectChildByDepth()
+            # node = node.UCTSelectChildByDepth()
+            node = node.UCTSelectChild()
             state = node.state
 
         # Expand
@@ -233,7 +217,7 @@ def UCT(rootstate, itermax, verbose = False):
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
         if i % 10 == 0:
-            G = Graph(format='png')
+            G = Graph(format='svg')
             G.attr('node', shape='circle')
             G.graph_attr.update(size="1200")
             make_graph(G,rootnode)
@@ -253,18 +237,13 @@ def UCT(rootstate, itermax, verbose = False):
     o_trj = open('trjs.txt', 'w')
     o_trj.write(trjs)
     o_trj.close()
-    os.system("gmx_mpi trjcat -f " + trjs + " -o merged_mcts.trr -cat")
-    os.system("echo 4 4 | gmx_mpi rms -s target_npt_320.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
+    os.system("gmx trjcat -f " + trjs + " -o merged_mcts.trr -cat")
+    os.system("echo 4 4 | gmx rms -s target_npt.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
     modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
     os.remove('rmsd_mcts_tmp.xvg')
     # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
     #     os.remove(file)
-    # Output some information about the tree - can be omitted
-    ot = open('tree.txt','w')
-    if (verbose): ot.write(rootnode.TreeToString(0))
-    else: ot.write(rootnode.ChildrenToString())
-    ot.close()
-    G = Graph(format='png')
+    G = Graph(format='svg')
     G.attr('node', shape='circle')
     G.graph_attr.update(size="1200")
     make_graph(G,rootnode)
@@ -285,5 +264,5 @@ def make_graph(G, nd):
 
 if __name__ == "__main__":
     os.system('rm all_structure.gro')
-    UCT(0, 20000, verbose=True)
+    UCT(0, 5000, verbose=True)
     # UCT_progressive_widenning(0, 5000, verbose = True)
