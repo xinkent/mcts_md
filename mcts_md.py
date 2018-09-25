@@ -5,12 +5,14 @@ from util import *
 import random
 import copy
 from graphviz import Graph
+import argparse
+import dill
 MAX_child = 3
 MAX_try = 3
 rmsd_list = []
 
 class Node:
-    def __init__(self, move = None, parent = None, state = None, depth = 0):
+    def __init__(self, move = None, parent = None, state = None, c = 0.02, depth = 0):
         self.parentNode = parent # "None" for the root node
         self.childNodes = []
         self.depth = depth
@@ -21,9 +23,9 @@ class Node:
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
-        self.c = 0.02
+        self.c = c
         self.alpha = 1.5
-        self.rmsd = 1000 # 仮．初期値に直そう
+        self.rmsd = 1000 # 仮
         self.try_num = 0
 
     def UCTSelectChild(self):
@@ -32,7 +34,7 @@ class Node:
         child_depths = [ch.child_depth for ch in self.childNodes]
         # depth_diff = max(child_depths) - min(child_depths)
         c = rmsd_diff * self.alpha
-        s = sorted(self.childNodes, key = lambda c: c.rmsd_max + self.c * sqrt(2*log(self.visits)/c.visits))[-1] # 通常盤
+        s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] # 通常盤
         # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
         # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1]
         return s
@@ -67,7 +69,7 @@ class Node:
         return uct
 
     def MakeChild(self, s, d):
-        n = Node(parent = self, state = s, depth = d)
+        n = Node(parent = self, state = s, c = self.c, depth = d)
         return n
 
     def AddChild(self, n):
@@ -123,7 +125,7 @@ class Node:
             o = open('log_mcts.txt','w')
             o.write(str(first_rmsd) + '\n')
             o.close()
-       
+
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
@@ -153,14 +155,28 @@ def check_similarity(nd):
         return True
 
 
-def UCT(rootstate, itermax, verbose = False):
-    rootnode = Node(state = rootstate)
-    n_state = 0
-    max_rmsd = -10000
-    max_node    = rootnode
-    o = open('log_mcts.txt','w')
-    o.close()
-    for i in range(itermax):
+def UCT(rootstate):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--steps',     '-s',  type = int,   default = 1000)
+    parser.add_argument('--c',         '-c',  type = float, default = 0.05)
+    parser.add_argument('--interrupt', '-ir', type = int,   default = 0)
+    parser.add_argument('--continue',  '-cn', type = int,   default = 0)
+    args = parser.parse_args()
+    steps     = args.steps
+    c         = args.c
+    interrupt = args.interrupt
+    cn  = args.continue
+    
+    if cn:
+        dill.load_session('session.pkl')
+    else:
+        rootnode = Node(state = rootstate)
+        n_state = rootstate
+        max_rmsd = -10000
+        max_node    = rootnode
+        o = open('log_mcts.txt','w')
+        o.close()
+    for i in steps:
         o = open('log_mcts.txt','a')
         n_o = open('near_count.txt', 'a')
         node = rootnode
@@ -191,8 +207,8 @@ def UCT(rootstate, itermax, verbose = False):
             else:
                 n_o.write(str(state) + '\n')
         # MAX_tryやっても追加されない場合は枝を刈り取る
-        else:
-            flag = 1
+        # else:
+        #     flag = 1
 
         n_o.close()
         # Backpropagate
@@ -225,29 +241,35 @@ def UCT(rootstate, itermax, verbose = False):
         if max_rmsd > -0.1:
             break
 
+    # bestなノードまでのトラジェクトリを結合
+    if not interrupt:
+        trjs = ""
+        node = max_node
+        while True:
+            print(node.state)
+            trjs = "md_" + str(node.state) + ".trr " + trjs
+            node = node.parentNode
+            if node.parentNode == None:
+                break
+        o_trj = open('trjs.txt', 'w')
+        o_trj.write(trjs)
+        o_trj.close()
+        os.system("gmx trjcat -f " + trjs + " -o merged_mcts.trr -cat")
+        os.system("echo 4 4 | gmx rms -s target_npt.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
+        modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
+        os.remove('rmsd_mcts_tmp.xvg')
+        # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
+        #     os.remove(file)
+        G = Graph(format='svg')
+        G.attr('node', shape='circle')
+        G.graph_attr.update(size="1200")
+        make_graph(G,rootnode)
+        G.render('./tree/mcts_tree')
 
-    trjs = ""
-    node = max_node
-    while True:
-        print(node.state)
-        trjs = "md_" + str(node.state) + ".trr " + trjs
-        node = node.parentNode
-        if node.parentNode == None:
-            break
-    o_trj = open('trjs.txt', 'w')
-    o_trj.write(trjs)
-    o_trj.close()
-    os.system("gmx trjcat -f " + trjs + " -o merged_mcts.trr -cat")
-    os.system("echo 4 4 | gmx rms -s target_npt.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
-    modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
-    os.remove('rmsd_mcts_tmp.xvg')
-    # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
-    #     os.remove(file)
-    G = Graph(format='svg')
-    G.attr('node', shape='circle')
-    G.graph_attr.update(size="1200")
-    make_graph(G,rootnode)
-    G.render('./tree/mcts_tree')
+    # 途中経過を保存(→どうやる？)
+    else:
+        dill.dump_session('session.pkl')
+
 
 
 
@@ -265,4 +287,3 @@ def make_graph(G, nd):
 if __name__ == "__main__":
     os.system('rm all_structure.gro')
     UCT(0, 5000, verbose=True)
-    # UCT_progressive_widenning(0, 5000, verbose = True)
