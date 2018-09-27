@@ -6,10 +6,23 @@ import random
 import copy
 from graphviz import Graph
 import argparse
-import dill
+import pickle
 MAX_child = 3
 MAX_try = 3
-rmsd_list = []
+MIN_RMSD = 0.1
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--reactant',  '-r',                 default = '0')
+parser.add_argument('--target',    '-t',                 default = 'target_processed')
+parser.add_argument('--topol',     '-top',               default = 'topol')
+parser.add_argument('--steps',     '-s',  type = int,   default = 1000)
+parser.add_argument('--c',         '-c',  type = float, default = 0.05)
+parser.add_argument('--interrupt', '-ir', type = int,   default = 0)
+parser.add_argument('--continue_',  '-cn', type = int,   default = 0)
+args = parser.parse_args()
+reactant = args.reactant
+target   = args.target
+topol    = args.topol
 
 class Node:
     def __init__(self, move = None, parent = None, state = None, c = 0.02, depth = 0):
@@ -112,17 +125,17 @@ class Node:
         self.parentNode.try_num += 1
         tmp = str(state) + '_tmp'
         if pstate == 0:
-            os.system('gmx grompp -f md.mdp -c 0_320.gro -t 0_320.cpt -p topol.top -o %s.tpr -maxwarn 5' % tmp)
+            os.system('gmx grompp -f md.mdp -c %s.gro -t %s.cpt -p %s.top -o %s.tpr -maxwarn 5' % (reactant, reactant, topol, tmp))
         else:
             os.system('gmx grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
         # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
         os.system('gmx mdrun -deffnm %s -ntmpi 1 -ntomp 6 -dlb auto -gpu_id 0' % tmp)
-        os.system("echo 4 4 | gmx rms -s target_npt_320.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (tmp, state)) # rmsdを測定
+        os.system("echo 4 4 | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         # 初期RMSDを書き込み
         if pstate == 0:
             first_rmsd = rmsds[0]
-            o = open('log_mcts.txt','w')
+            o = open('log_pats.txt','w')
             o.write(str(first_rmsd) + '\n')
             o.close()
 
@@ -141,7 +154,7 @@ class Node:
 
 
 # 類似構造でかつ、rmsdが小さい構造がすでにある場合はFalse
-def check_similarity(nd):
+def check_similarity(nd, rmsd_list):
     if nd.state == 1:
         return True
     os.system('echo 4 4 |gmx rms -s md_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
@@ -156,28 +169,32 @@ def check_similarity(nd):
 
 
 def UCT(rootstate):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--steps',     '-s',  type = int,   default = 1000)
-    parser.add_argument('--c',         '-c',  type = float, default = 0.05)
-    parser.add_argument('--interrupt', '-ir', type = int,   default = 0)
-    parser.add_argument('--continue',  '-cn', type = int,   default = 0)
-    args = parser.parse_args()
     steps     = args.steps
     c         = args.c
     interrupt = args.interrupt
-    cn  = args.continue
+    cn        = args.continue_
     
+    succeed = 0 
     if cn:
-        dill.load_session('session.pkl')
+        with open('vars.pickle','rb') as f:
+            var_list = pickle.load(f)
+        rootnode = var_list[0]
+        n_state = var_list[1]
+        max_rmsd = var_list[2]
+        max_node = var_list[3]
+        rmsd_list = var_list[4]
+            
     else:
+        os.system('rm all_structure.gro')
         rootnode = Node(state = rootstate)
         n_state = rootstate
         max_rmsd = -10000
         max_node    = rootnode
-        o = open('log_mcts.txt','w')
+        rmsd_list = []
+        o = open('log_pats.txt','w')
         o.close()
-    for i in steps:
-        o = open('log_mcts.txt','a')
+    for i in range(steps):
+        o = open('log_pats.txt','a')
         n_o = open('near_count.txt', 'a')
         node = rootnode
         state = rootstate
@@ -196,10 +213,11 @@ def UCT(rootstate):
         state = n_state + 1
         depth = parent_depth + 1
         # node = node.AddChild(state) # add child and descend tree
+        print('state is ' + str(state))	
         node = node.MakeChild(s = state, d = depth)
         result = node.MDrun()
         if result < parent_rmsd: # RMSDが減少した場合のみexpandする
-            if check_similarity(node):
+            if check_similarity(node, rmsd_list):
                 parent_node.AddChild(node)
                 os.system('cat md_%s.gro >> all_structure.gro'%state) # 構造を保存
                 rmsd_list.append(result) # RMSDを保存
@@ -238,11 +256,12 @@ def UCT(rootstate):
             G.graph_attr.update(size="1200")
             make_graph(G,rootnode)
             G.render('./tree/tree_' + str(i) + 'epoch')
-        if max_rmsd > -0.1:
+        if max_rmsd > -MIN_RMSD:
+            succeed = 1
             break
 
     # bestなノードまでのトラジェクトリを結合
-    if not interrupt:
+    if succeed:
         trjs = ""
         node = max_node
         while True:
@@ -254,22 +273,28 @@ def UCT(rootstate):
         o_trj = open('trjs.txt', 'w')
         o_trj.write(trjs)
         o_trj.close()
-        os.system("gmx trjcat -f " + trjs + " -o merged_mcts.trr -cat")
-        os.system("echo 4 4 | gmx rms -s target_npt.gro -f merged_mcts.trr -tu ns -o rmsd_mcts_tmp.xvg")
-        modify_rmsd('rmsd_mcts_tmp.xvg', 'rmsd_mcts.xvg')
-        os.remove('rmsd_mcts_tmp.xvg')
+        os.system("gmx trjcat -f " + trjs + " -o merged_pats.trr -cat")
+        os.system("echo 4 4 | gmx rms -s %s.gro -f merged_pats.trr -tu ns -o rmsd_pats_tmp.xvg" % target)
+        modify_rmsd('rmsd_pats_tmp.xvg', 'rmsd_pats.xvg')
+        os.remove('rmsd_pats_tmp.xvg')
         # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
         #     os.remove(file)
         G = Graph(format='svg')
         G.attr('node', shape='circle')
         G.graph_attr.update(size="1200")
         make_graph(G,rootnode)
-        G.render('./tree/mcts_tree')
+        G.render('./tree/pats_tree')
 
     # 途中経過を保存(→どうやる？)
-    else:
-        dill.dump_session('session.pkl')
-
+    if interrupt:
+        var_list = []
+        var_list.append(rootnode)
+        var_list.append(n_state)
+        var_list.append(max_rmsd)
+        var_list.append(max_node)
+        var_list.append(rmsd_list)
+        with open('vars.pickle', mode = 'wb') as f:
+            pickle.dump(var_list, f)
 
 
 
@@ -285,5 +310,4 @@ def make_graph(G, nd):
         make_graph(G,child_node)
 
 if __name__ == "__main__":
-    os.system('rm all_structure.gro')
-    UCT(0, 5000, verbose=True)
+    UCT(0)
