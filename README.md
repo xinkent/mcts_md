@@ -1,7 +1,7 @@
 # mcts_md
-Python implementation for PACS_MD and MCTS_MD.
+Python implementation for PaCS_MD and PaTS_MD.
 It uses GROMACS command for all of the manipulation　about MD simulation.
-The required version is GROMACS 2018.1.
+The required version is GROMACS 2016.5.
 ## USAGE
 ### equivration
 Before running PaCS or PaTS MD, We have to do adding ion, energy minimization, nvt equilibration and npt equilibration.
@@ -29,11 +29,17 @@ python pacs_md.py
 python pats_md.py 
 ```
 - Options
-  - -r <.gro> : reactant structure file.
-  - -t <.gro> : target structure file.
-  - -top <.top> : topology file.
+  - -r : reactant structure file (.gro).
+  - -t : target structure file (.gro).
+  - -top : topology file (.top).
   - s : step size. default is 1000.
   - c : a parameter of ucb socre. default is 0.05.
   - cn : resume from the previous state. default is 0.
   - ntmpi : the number of mpi.
   - ntomp : the number of open MP
+
+If you have the reactant structure file as reactant.gro, target structure file as target.gro, and topology file as topol.top
+your command is 
+```
+python pats_md.py -r reactant -t target -top topol
+```
