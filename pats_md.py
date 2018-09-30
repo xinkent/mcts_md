@@ -12,18 +12,20 @@ MAX_try = 3
 MIN_RMSD = 0.1
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--reactant',  '-r',                 default = '0')
-parser.add_argument('--target',    '-t',                 default = 'target_processed')
-parser.add_argument('--topol',     '-top',               default = 'topol')
-parser.add_argument('--steps',     '-s',  type = int,   default = 1000)
-parser.add_argument('--c',         '-c',  type = float, default = 0.05)
-parser.add_argument('--interrupt', '-ir', type = int,   default = 0)
-parser.add_argument('--continue_',  '-cn', type = int,   default = 0)
+parser.add_argument('--reactant',  '-r',                   default = '0')
+parser.add_argument('--target',    '-t',                   default = 'target_processed')
+parser.add_argument('--topol',     '-top',                 default = 'topol')
+parser.add_argument('--steps',     '-s',     type = int,   default = 1000)
+parser.add_argument('--c',         '-c',     type = float, default = 0.05)
+parser.add_argument('--continue_', '-cn',    type = int,   default = 0)
+parser.add_argument('--ntmpi',     '-ntmpi', type = int,   default = 1)
+parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10) 
 args = parser.parse_args()
 reactant = args.reactant
 target   = args.target
 topol    = args.topol
-
+ntmpi    = args.ntmpi
+ntomp    = args.ntomp
 class Node:
     def __init__(self, move = None, parent = None, state = None, c = 0.02, depth = 0):
         self.parentNode = parent # "None" for the root node
@@ -129,7 +131,8 @@ class Node:
         else:
             os.system('gmx grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
         # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
-        os.system('gmx mdrun -deffnm %s -ntmpi 1 -ntomp 6 -dlb auto -gpu_id 0' % tmp)
+        os.system('gmx mdrun -deffnm %s -ntmpi %d -ntomp %d -dlb auto' % (tmp, ntmpi, ntomp))
+
         os.system("echo 4 4 | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         # 初期RMSDを書き込み
@@ -171,7 +174,6 @@ def check_similarity(nd, rmsd_list):
 def UCT(rootstate):
     steps     = args.steps
     c         = args.c
-    interrupt = args.interrupt
     cn        = args.continue_
     
     succeed = 0 
@@ -285,8 +287,8 @@ def UCT(rootstate):
         make_graph(G,rootnode)
         G.render('./tree/pats_tree')
 
-    # 途中経過を保存(→どうやる？)
-    if interrupt:
+    # 成功しなかった場合は、途中経過をpickleに保存
+    else:
         var_list = []
         var_list.append(rootnode)
         var_list.append(n_state)
