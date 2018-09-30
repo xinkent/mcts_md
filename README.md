@@ -44,4 +44,4 @@ your command is
 python pats_md.py -r reactant -t target -top topol
 ```
 If PaTS-MD doesn't reach the enough RMSD, the intermediate state is preserve as vars.pikcle automatically.
-You can resume the process by setting the -cn 1.
+You can resume the process by setting the -cn to 1.
