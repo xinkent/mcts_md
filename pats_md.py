@@ -252,7 +252,7 @@ def UCT(rootstate):
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
-        if i % 10 == 0:
+        if i % 100 == 0:
             G = Graph(format='svg')
             G.attr('node', shape='circle')
             G.graph_attr.update(size="1200")
