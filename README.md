@@ -32,11 +32,11 @@ python pats_md.py
   - -r : reactant structure file (.gro).
   - -t : target structure file (.gro).
   - -top : topology file (.top).
-  - s : step size. default is 1000.
-  - c : a parameter of ucb socre. default is 0.05.
-  - cn : resume from the previous state. default is 0.
-  - ntmpi : the number of mpi.
-  - ntomp : the number of open MP
+  - -s : step size. default is 1000.
+  - -c : a parameter of ucb socre. default is 0.05.
+  - -cn : resume from the previous state. default is 0.
+  - -ntmpi : the number of mpi.
+  - -ntomp : the number of open MP
 
 If you have the reactant structure file as reactant.gro, target structure file as target.gro, and topology file as topol.top
 your command is 
