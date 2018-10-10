@@ -146,7 +146,7 @@ class Node:
         min_i = rmsds.argsort()[0]
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
-        for file in glob.glob("%s*" % tmp) + glob.glob("*#"):
+        for file in glob.glob("*#"):
             os.remove(file)
         self.rmsd = min_rmsd
         self.rmsd_depth_dict[self.depth] = min_rmsd
