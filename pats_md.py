@@ -23,11 +23,12 @@ parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10)
 args = parser.parse_args()
 reactant = args.reactant
 target   = args.target
+c_       = args.c
 topol    = args.topol
 ntmpi    = args.ntmpi
 ntomp    = args.ntomp
 class Node:
-    def __init__(self, move = None, parent = None, state = None, c = 0.02, depth = 0):
+    def __init__(self, move = None, parent = None, state = None, c = c_, depth = 0):
         self.parentNode = parent # "None" for the root node
         self.childNodes = []
         self.depth = depth
@@ -173,7 +174,7 @@ def check_similarity(nd, rmsd_list):
 
 def UCT(rootstate):
     steps     = args.steps
-    c         = args.c
+    c_        = args.c
     cn        = args.continue_
     
     succeed = 0 
@@ -188,7 +189,7 @@ def UCT(rootstate):
             
     else:
         os.system('rm all_structure.gro')
-        rootnode = Node(state = rootstate)
+        rootnode = Node(state = rootstate, c = c_)
         n_state = rootstate
         max_rmsd = -10000
         max_node    = rootnode
