@@ -37,6 +37,7 @@ python pats_md.py
   - -cn : resume from the previous state. default is 0.
   - -ntmpi : the number of mpi.
   - -ntomp : the number of open MP
+  - -del   : If you want to delete the intermediate trajectory files, set this to 1. default is 0.
 
 If you have the reactant structure file as reactant.gro, target structure file as target.gro, and topology file as topol.top
 your command is 
