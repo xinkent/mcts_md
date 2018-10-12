@@ -151,10 +151,12 @@ class Node:
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
         for file in glob.glob("*#"):
             os.remove(file)
-        if delete == 1:
             for ext in ['trr', 'tpr', 'edr', 'log','gro', 'cpt']:
                 for file in glob.glob('%s.%s' % (tmp,ext)):
                     os.remove(file)
+        if delete == 1:
+            for file in glob.glob('%s*' % tmp):
+                os.remove(file)
         self.rmsd = min_rmsd
         self.rmsd_depth_dict[self.depth] = min_rmsd
         return min_rmsd
