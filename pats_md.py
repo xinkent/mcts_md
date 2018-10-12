@@ -132,11 +132,11 @@ class Node:
         if pstate == 0:
             os.system('gmx grompp -f md.mdp -c %s.gro -t %s.cpt -p %s.top -o %s.tpr -maxwarn 5' % (reactant, reactant, topol, tmp))
         else:
-            os.system('gmx grompp -f md.mdp -t md_%d.xtc -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
-        # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.xtcからmdrun
-        os.system('gmx mdrun -deffnm %s -ntmpi %d -ntomp %d -dlb auto' % (tmp, ntmpi, ntomp))
+            os.system('gmx grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
+        # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
+        os.system('gmx mdrun -deffnm %s  -ntmpi %d  -ntomp %d -dlb auto' % (tmp,  ntmpi, ntomp))
 
-        os.system("echo 4 4 | gmx rms -s %s.gro -f %s.xtc  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
+        os.system("echo 4 4 | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         # 初期RMSDを書き込み
         if pstate == 0:
@@ -147,13 +147,14 @@ class Node:
 
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
-        os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.xtc -o md_%s.xtc -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
-        os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.xtc -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
+        os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
+        os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
         for file in glob.glob("*#"):
             os.remove(file)
         if delete == 1:
-            for file in glob.glob('%s*' % tmp):
-                os.remove(file)
+            for ext in ['trr', 'tpr', 'edr', 'log','gro', 'cpt']:
+                for file in glob.glob('%s.%s' % (tmp,ext)):
+                    os.remove(file)
         self.rmsd = min_rmsd
         self.rmsd_depth_dict[self.depth] = min_rmsd
         return min_rmsd
@@ -274,15 +275,15 @@ def UCT(rootstate):
         node = max_node
         while True:
             print(node.state)
-            trjs = "md_" + str(node.state) + ".xtc " + trjs
+            trjs = "md_" + str(node.state) + ".trr " + trjs
             node = node.parentNode
             if node.parentNode == None:
                 break
         o_trj = open('trjs.txt', 'w')
         o_trj.write(trjs)
         o_trj.close()
-        os.system("gmx trjcat -f " + trjs + " -o merged_pats.xtc -cat")
-        os.system("echo 4 4 | gmx rms -s %s.gro -f merged_pats.xtc -tu ns -o rmsd_pats_tmp.xvg" % target)
+        os.system("gmx trjcat -f " + trjs + " -o merged_pats.trr -cat")
+        os.system("echo 4 4 | gmx rms -s %s.gro -f merged_pats.trr -tu ns -o rmsd_pats_tmp.xvg" % target)
         modify_rmsd('rmsd_pats_tmp.xvg', 'rmsd_pats.xvg')
         os.remove('rmsd_pats_tmp.xvg')
         # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
