@@ -4,7 +4,7 @@ from multiprocessing import Pool
 from util import *
 import argparse
 
-MIN_RMSD = 0.45
+MIN_RMSD = 0.1
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--reactant',  '-r',                   default = '0')
@@ -51,7 +51,7 @@ def md_cycle(args):
 
 def pacs_md(MAX_CYCLE, n_para, continue_flag):
     dt = 1 # ps for each step
-    nsteps = 11 # ショートMDのステップ数+1(時刻0を含む)
+    nsteps = 101 # ショートMDのステップ数+1(時刻0を含む)
     if continue_flag:
         edge_log = np.loadtxt("edge_log.csv", delimiter = ",")
         edge_log = [list(l) for l in edge_log]
