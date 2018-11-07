@@ -10,6 +10,7 @@ import pickle
 MAX_child = 3
 MAX_try = 3
 MIN_RMSD = 0.1
+FIRST_FLAG = 1
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--reactant',  '-r',                   default = '0')
@@ -19,7 +20,7 @@ parser.add_argument('--steps',     '-s',     type = int,   default = 1000)
 parser.add_argument('--c',         '-c',     type = float, default = 0.05)
 parser.add_argument('--continue_', '-cn',    type = int,   default = 0)
 parser.add_argument('--ntmpi',     '-ntmpi', type = int,   default = 1)
-parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10) 
+parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10)
 parser.add_argument('--delete',    '-del'  , type = int,   default = 0)
 args = parser.parse_args()
 reactant = args.reactant
@@ -139,11 +140,12 @@ class Node:
         os.system("echo 4 4 | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         # 初期RMSDを書き込み
-        if pstate == 0:
+        if FIRST_FLAG:
             first_rmsd = rmsds[0]
             o = open('log_pats.txt','w')
             o.write(str(first_rmsd) + '\n')
             o.close()
+            FIRST_FLAG = 0
 
         min_rmsd = np.min(rmsds)
         min_i = rmsds.argsort()[0]
@@ -184,8 +186,8 @@ def UCT(rootstate):
     steps     = args.steps
     c_        = args.c
     cn        = args.continue_
-    
-    succeed = 0 
+
+    succeed = 0
     if cn:
         with open('vars.pickle','rb') as f:
             var_list = pickle.load(f)
@@ -194,7 +196,8 @@ def UCT(rootstate):
         max_rmsd = var_list[2]
         max_node = var_list[3]
         rmsd_list = var_list[4]
-            
+        global FIRST_FLAG
+        FIRST_FLAG = 0
     else:
         os.system('rm all_structure.gro')
         rootnode = Node(state = rootstate, c = c_)
@@ -224,7 +227,7 @@ def UCT(rootstate):
         state = n_state + 1
         depth = parent_depth + 1
         # node = node.AddChild(state) # add child and descend tree
-        print('state is ' + str(state))	
+        print('state is ' + str(state))
         node = node.MakeChild(s = state, d = depth)
         result = node.MDrun()
         if result < parent_rmsd: # RMSDが減少した場合のみexpandする
@@ -272,40 +275,39 @@ def UCT(rootstate):
             break
 
     # bestなノードまでのトラジェクトリを結合
-    if succeed:
-        trjs = ""
-        node = max_node
-        while True:
-            print(node.state)
-            trjs = "md_" + str(node.state) + ".trr " + trjs
-            node = node.parentNode
-            if node.parentNode == None:
-                break
-        o_trj = open('trjs.txt', 'w')
-        o_trj.write(trjs)
-        o_trj.close()
-        os.system("gmx trjcat -f " + trjs + " -o merged_pats.trr -cat")
-        os.system("echo 4 4 | gmx rms -s %s.gro -f merged_pats.trr -tu ns -o rmsd_pats_tmp.xvg" % target)
-        modify_rmsd('rmsd_pats_tmp.xvg', 'rmsd_pats.xvg')
-        os.remove('rmsd_pats_tmp.xvg')
-        # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
-        #     os.remove(file)
-        G = Graph(format='svg')
-        G.attr('node', shape='circle')
-        G.graph_attr.update(size="1200")
-        make_graph(G,rootnode)
-        G.render('./tree/pats_tree')
 
-    # 成功しなかった場合は、途中経過をpickleに保存
-    else:
-        var_list = []
-        var_list.append(rootnode)
-        var_list.append(n_state)
-        var_list.append(max_rmsd)
-        var_list.append(max_node)
-        var_list.append(rmsd_list)
-        with open('vars.pickle', mode = 'wb') as f:
-            pickle.dump(var_list, f)
+    trjs = ""
+    node = max_node
+    while True:
+        print(node.state)
+        trjs = "md_" + str(node.state) + ".trr " + trjs
+        node = node.parentNode
+        if node.parentNode == None:
+            break
+    o_trj = open('trjs.txt', 'w')
+    o_trj.write(trjs)
+    o_trj.close()
+    os.system("gmx trjcat -f " + trjs + " -o merged_pats.trr -cat")
+    os.system("echo 4 4 | gmx rms -s %s.gro -f merged_pats.trr -tu ns -o rmsd_pats_tmp.xvg" % target)
+    modify_rmsd('rmsd_pats_tmp.xvg', 'rmsd_pats.xvg')
+    os.remove('rmsd_pats_tmp.xvg')
+    # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
+    #     os.remove(file)
+    G = Graph(format='svg')
+    G.attr('node', shape='circle')
+    G.graph_attr.update(size="1200")
+    make_graph(G,rootnode)
+    G.render('./tree/pats_tree')
+
+    # 途中経過をpickleに保存
+    var_list = []
+    var_list.append(rootnode)
+    var_list.append(n_state)
+    var_list.append(max_rmsd)
+    var_list.append(max_node)
+    var_list.append(rmsd_list)
+    with open('vars.pickle', mode = 'wb') as f:
+        pickle.dump(var_list, f)
 
 
 
