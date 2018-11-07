@@ -29,22 +29,25 @@ def md_cycle(args):
         os.system('gmx mdrun -deffnm %s -ntmpi 1 -ntomp 10 -dlb auto' % md)
         os.system("echo 4 4 | gmx rms -s target_processed.gro -f %s.trr  -o %s.xvg -tu ns" % (md, rmsd))
 
-def pacs_md(MAX_CYCLE = 100, n_para = 5):
+def pacs_md(MAX_CYCLE = 100, n_para = 5, continue_flag = True):
     dt = 1 # ps for each step
-    nsteps = 101 # ショートMDのステップ数+1(時刻0を含む) 
-    pass_flag = False 
-    cycle_step = 0
-    edge_log = []  # Treeの遷移関係のlog
-    log_i = 0
-    o = open('log_pacs.txt','w')
-    o.close()
+    nsteps = 101 # ショートMDのステップ数+1(時刻0を含む)
+    if continue_flag:
+        edge_log = np.loadtxt("edge_log.csv", delimiter = ",")
+        edge_log = [list(l) for l in log]
+        edge_log = log[0:len(log)-1]
+        cycle_step = len(edge_log)
+        cycle_num = -1 # 現実行時におけるステップ数
+    else:
+        cycle_step = 0
+        o = open('log_pacs.txt','w')
+        o.close()
+        edge_log = []  # Treeの遷移関係のlog
+        cycle_num = 0
     min_rmsd = 10000 # 初期値
-    # 途中(100回目)から再開する場合
-    # pass_flag = True
-    # cycle_step = 100
 
-    while cycle_step < MAX_CYCLE and min_rmsd >= MIN_RMSD:
-        if not pass_flag:
+    while cycle_num < MAX_CYCLE and min_rmsd >= MIN_RMSD:
+        if not continue_flag:
             if cycle_step == 0:
                 for i in range(n_para):
                     first_cycle(i)
@@ -52,13 +55,14 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
                 for i in range(n_para):
                     md_cycle([cycle_step, i, min_rmsd_idx[i],False])
         else:
-            pass_flag = False
+            continue_flag = False
         # 最小RMSDを記録
         rmsd_list = np.zeros(n_para * nsteps)
         for i in range(n_para):
             rmsd_list[i * nsteps : (i+1) * nsteps] = read_rmsd('rmsd_%d_%d.xvg'%(cycle_step, i))
         min_rmsd = min(rmsd_list)
-       
+
+       # 最初の一回だけ初期値を記録
         if cycle_step == 0:
             first_rmsd = rmsd_list[0]
             write_log(first_rmsd)
@@ -67,19 +71,23 @@ def pacs_md(MAX_CYCLE = 100, n_para = 5):
         min_rmsd_idx = rmsd_list.argsort()[:n_para]
         min_rmsd_idx = [(r // nsteps, r % nsteps) for r in min_rmsd_idx]
         edge_log.append([r[0] for r in min_rmsd_idx])
-        
+
         cycle_step += 1
-        log_i += 1
-        
-        # 不要なファイルを削除        
-        for file in glob.glob('md_[0-9]*') + glob.glob("*#"):
-            os.remove(file)
+        cycle_num  += 1
+
+        # 不要なファイルを削除
+        # for file in glob.glob('md_[0-9]*') + glob.glob("*#"):
+        #     os.remove(file)
 
     # 最後のMDのトラジェクリについて切り取り処理をする
     for i in range(n_para):
         md_cycle([cycle_step, i, min_rmsd_idx[i],True])
     # logをファイルに保存(concat_traj)に渡す
     np.savetxt('edge_log.csv', np.array(edge_log), delimiter=',')
+
+    if min_rmsd < MIN_RMSD:
+        concat_traj()
+        make_tree_pacs('edge_log.csv')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
 def concat_traj():
@@ -118,9 +126,5 @@ if __name__ == '__main__':
     M = 1000 # サイクル数
     k = 5 # 並列数
     pacs_md(M, k)
-    concat_traj()
-    make_tree_pacs('edge_log.csv')
     # for file in (glob.glob("*#") + glob.glob("md_[0-9]*") + glob.glob("res_[0-9]*") + glob.glob("rmsd_[0-9]*")):
-    #     os.remove(file)    
-
-
+    #     os.remove(file)
