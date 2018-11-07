@@ -126,6 +126,7 @@ class Node:
                 self.rmsd_depth_dict[d] = result
 
     def MDrun(self):
+        global FIRST_FLAG
         state = self.state
         pstate = self.parentNode.state
         self.parentNode.try_num += 1
