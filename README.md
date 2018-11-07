@@ -17,26 +17,16 @@ Both PaCS and PaTS MD program require the files shown below.
 - target structure (.gro)
 - mdp file for short md (.mdp)
 
-
-### PACS MD
-In the PaCS MD, the number of cycles is 100 and the number of parallele cascades is 5 in default configuration.
-This program makes output files including trajectory file (merged_pacs.trr) and rmsd to the target structure (rmsd_pacs.xvg).
-```
-python pacs_md.py
-```
 ### PaTS MD
-```
-python pats_md.py 
-```
 - Options
-  - -r : reactant structure file (.gro).
-  - -t : target structure file (.gro).
-  - -top : topology file (.top).
-  - -s : step size. default is 1000.
-  - -c : a parameter of ucb socre. default is 0.05.
-  - -cn : resume from the previous state. default is 0.
-  - -ntmpi : the number of mpi.
-  - -ntomp : the number of open MP
+  - -r : Reactant structure file (.gro).
+  - -t : Target structure file (.gro).
+  - -top : Topology file (.top).
+  - -s : Step size. default is 1000.
+  - -c : A parameter of ucb socre. Default is 0.05.
+  - -cn : Resume from the previous state. Default is 0.
+  - -ntmpi : The number of mpi.
+  - -ntomp : The number of open MP
   - -del   : If you want to delete the intermediate trajectory files, set this to 1. default is 0.
 
 If you have the reactant structure file as reactant.gro, target structure file as target.gro, and topology file as topol.top
@@ -46,3 +36,18 @@ python pats_md.py -r reactant -t target -top topol
 ```
 If PaTS-MD doesn't reach the enough RMSD, the intermediate state is preserve as vars.pikcle automatically.
 You can resume the process by setting the -cn to 1.
+
+### PACS MD
+```
+python pacs_md.py -r reactant -t target -top topl
+```
+- Options
+  - -r : Reactant structure file (.gro).
+  - -t : Target structure file (.gro).
+  - -top : Topology file (.top).
+  - -s : Step size. Default is 1000.
+  - -k : The number of parallelization. Default is 5
+  - -cn : Resume from the previous state. Default is 0.
+  - -ntmpi : The number of mpi.
+  - -ntomp : The number of open MP.
+  - -del   : If you want to delete the intermediate trajectory files, set this to 1. default is 0.
