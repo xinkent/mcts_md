@@ -23,6 +23,7 @@ parser.add_argument('--c',         '-c',     type = float, default = 0.05)
 parser.add_argument('--continue_', '-cn',    type = int,   default = 0)
 parser.add_argument('--ntmpi',     '-ntmpi', type = int,   default = 1)
 parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10)
+parser.add_argument('--lambda_',    '-lam'  , type = float, default = 0)
 parser.add_argument('--delete',    '-del'  , type = int,   default = 0)
 args = parser.parse_args()
 reactant = args.reactant
@@ -31,6 +32,7 @@ c_       = args.c
 topol    = args.topol
 ntmpi    = args.ntmpi
 ntomp    = args.ntomp
+lam      = args.lambda_
 delete   = args.delete
 class Node:
     def __init__(self, move = None, parent = None, state = None, c = c_, depth = 0):
@@ -122,8 +124,8 @@ class Node:
         # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
         os.system('gmx mdrun -deffnm %s  -ntmpi %d  -ntomp %d -dlb auto' % (tmp,  ntmpi, ntomp))
 
-        os.system("echo 4 4 | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
-        os.system("echo 10 10 | gmx rmsd -s %.gro -f %s.trr -o hrmsd_%d.xvg -tu ns"% (target, tmp, state)) # helix_rmsd を測定
+        os.system("echo 4 4  | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
+        os.system("echo 10 10 | gmx rms -s %s.gro -f %s.trr -o hrmsd_%d.xvg -tu ns -n index.ndx"% (target, tmp, state)) # helix_rmsd を測定
 
         rmsds = np.array(read_rmsd('rmsd_%d.xvg'%state))
         hrmsds = np.array(read_rmsd('hrmsd_%d.xvg'%state))
@@ -138,10 +140,10 @@ class Node:
         # min_rmsd = np.min(rmsds)
         # min_i = rmsds.argsort()[0]
         # rmsdとhrmsdの減少量の和が最大となるものを選ぶ．
-        min_i = sorted(np.arange(len(rmsds)), key = lambda i: (rmsds[0] - rmsds[i]) + (hrmsds[0] - hrmsds[i]))[0]
+        min_i = sorted(np.arange(len(rmsds)), key = lambda i: (1-lam)*(rmsds[i] - rmsds[0]) + lam*(hrmsds[i] - hrmsds[0]))[0]
         min_rmsd  = rmsds[min_i]
-        min_hrmsd = min_hrmsds[min_i]
-        min_x     = (min_rmsd + min_hrmsd) / 2
+        min_hrmsd = hrmsds[min_i]
+        min_x     = (1-lam) * min_rmsd + lam * min_hrmsd
 
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
@@ -249,7 +251,7 @@ def UCT(rootstate):
 
         o.write(str(best_rmsd) + '\n')
         o.close()
-        if i % 100 == 0:
+        if i % 10 == 0:
             G = Graph(format='svg')
             G.attr('node', shape='circle')
             G.graph_attr.update(size="1200")
@@ -262,7 +264,7 @@ def UCT(rootstate):
     # bestなノードまでのトラジェクトリを結合
 
     trjs = ""
-    node = max_node
+    node = best_node
     while True:
         print(node.state)
         trjs = "md_" + str(node.state) + ".trr " + trjs
