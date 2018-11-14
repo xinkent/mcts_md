@@ -11,6 +11,7 @@ MAX_child = 3
 MAX_try = 3
 MIN_RMSD = 0.1
 FIRST_FLAG = 1
+INF = 10000
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--reactant',  '-r',                   default = '0')
@@ -35,56 +36,25 @@ class Node:
         self.parentNode = parent # "None" for the root node
         self.childNodes = []
         self.depth = depth
-        self.child_depth = 0
         self.rmsd_sum = 0
-        self.rmsd_max = -1000
-        self.rmsd_depth_dict = {}
+        self.rmsd_max = -INF
         self.visits = 0
         self.state = state
         self.untriedMoves = MAX_child
         self.c = c
         self.alpha = 1.5
-        self.rmsd = 1000 # 仮
+        self.rmsd = INF
         self.try_num = 0
 
     def UCTSelectChild(self):
-        child_rmsds = [ch.rmsd_max for ch in self.childNodes]
-        rmsd_diff = max(child_rmsds) - min(child_rmsds)
-        child_depths = [ch.child_depth for ch in self.childNodes]
-        # depth_diff = max(child_depths) - min(child_depths)
-        c = rmsd_diff * self.alpha
         s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] # 通常盤
-        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
-        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * (depth_diff/2) * sqrt(2*log(self.visits)/ch.visits))[-1]
         return s
-
-    def UCTSelectChildByDepth(self):
-        node_idx = np.arange(len(self.childNodes))
-        while True:
-            print('node_idx  ' + str(node_idx))
-            child_depths = np.array([self.childNodes[idx].child_depth for idx in node_idx])
-            min_depth = min(child_depths)
-            min_depth_idx = np.where(child_depths == min(child_depths))[0]
-            ucts = [self.childNodes[idx].rmsd_depth_dict[min_depth] + self.c * sqrt(2*log(self.visits)/self.childNodes[idx].visits) for idx in node_idx]
-            max_uct_idx = np.argmax(ucts)
-            if max_uct_idx in  min_depth_idx:
-                return self.childNodes[node_idx[max_uct_idx]]
-            else:
-                node_idx = np.delete(node_idx, min_depth_idx)
-
 
     def CalcUCT(self):
         pnd = self.parentNode
         if pnd == None:
             return -1
-        child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
-        child_depths = [ch.child_depth for ch in pnd.childNodes]
-        min_depth = min(child_depths)
-
-        # rmsd_diff = max(child_rmsds) - min(child_rmsds)
-        # c = rmsd_diff * self.alpha
-        # uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
-        uct = self.rmsd_depth_dict[min_depth] + self.c * sqrt(2*log(pnd.visits) / self.visits)
+        uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
     def MakeChild(self, s, d):
@@ -115,15 +85,8 @@ class Node:
 
     def Update(self, result, d):
         self.visits += 1
-        self.rmsd_sum += result
         if result > self.rmsd_max:
             self.rmsd_max = result
-        if d > self.child_depth:
-            self.child_depth = d
-            self.rmsd_depth_dict[d] = result
-        else:
-            if result > self.rmsd_depth_dict[d]:
-                self.rmsd_depth_dict[d] = result
 
     def MDrun(self):
         global FIRST_FLAG
@@ -205,7 +168,7 @@ def UCT(rootstate):
         os.system('rm all_structure.gro')
         rootnode = Node(state = rootstate, c = c_)
         n_state = rootstate
-        max_rmsd = -10000
+        best_rmsd = INF
         max_node    = rootnode
         rmsd_list = []
         o = open('log_pats.txt','w')
@@ -215,7 +178,6 @@ def UCT(rootstate):
         n_o = open('near_count.txt', 'a')
         node = rootnode
         state = rootstate
-        flag = 0
         # Select
         # while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # progressive widennning
         while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
@@ -232,38 +194,25 @@ def UCT(rootstate):
         # node = node.AddChild(state) # add child and descend tree
         print('state is ' + str(state))
         node = node.MakeChild(s = state, d = depth)
-        result = node.MDrun()
-        if result < parent_rmsd: # RMSDが減少した場合のみexpandする
+        min_rmsd = node.MDrun()
+        if min_rmsd < parent_rmsd: # RMSDが減少した場合のみexpandする
             if check_similarity(node, rmsd_list):
                 parent_node.AddChild(node)
                 os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
-                rmsd_list.append(result) # RMSDを保存
+                rmsd_list.append(min_rmsd) # RMSDを保存
                 n_state += 1
             else:
                 n_o.write(str(state) + '\n')
-        # MAX_tryやっても追加されない場合は枝を刈り取る
-        # else:
-        #     flag = 1
 
         n_o.close()
         # Backpropagate
-        result = -1 * result
-        if result > max_rmsd:
-            max_rmsd = result
+        result = -1 * min_rmsd
+        if min_rmsd < best_rmsd:
+            best_rmsd = min_rmsd
             max_node = node
         while node != None:
             node.Update(result, depth)
             node = node.parentNode
-
-        # if flag == 1:
-        #     tmp_node = parent_node
-        #     while tmp_node.try_num >= MAX_try and tmp_node.childNodes == []:
-        #         tmp_parent = tmp_node.parentNode
-        #         if tmp_parent == None:
-        #             break
-        #         tmp_parent.DeleteChild(tmp_node)
-        #         tmp_parent.SearchMaxRmsd()
-        #         tmp_node = tmp_parent
 
         o.write(str(-1 * max_rmsd) + '\n')
         o.close()
@@ -273,7 +222,7 @@ def UCT(rootstate):
             G.graph_attr.update(size="1200")
             make_graph(G,rootnode)
             G.render('./tree/tree_' + str(i) + 'epoch')
-        if max_rmsd > -MIN_RMSD:
+        if best_rmsd < MIN_RMSD:
             succeed = 1
             break
 
