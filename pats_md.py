@@ -81,7 +81,7 @@ class Node:
         if child_rmsds != []:
             self.max_rmsd = max(child_rmsds)
         else:
-            self.max_rmsd = -1000
+            self.max_rmsd = -INF
 
     def Update(self, result, d):
         self.visits += 1
@@ -158,7 +158,7 @@ def UCT(rootstate):
             var_list = pickle.load(f)
         rootnode = var_list[0]
         n_state = var_list[1]
-        max_rmsd = var_list[2]
+        best_rmsd = var_list[2]
         max_node = var_list[3]
         rmsd_list = var_list[4]
         global FIRST_FLAG
@@ -213,7 +213,7 @@ def UCT(rootstate):
             node.Update(result, depth)
             node = node.parentNode
 
-        o.write(str(-1 * max_rmsd) + '\n')
+        o.write(str(-1 * best_rmsd) + '\n')
         o.close()
         if i % 100 == 0:
             G = Graph(format='svg')
@@ -254,7 +254,7 @@ def UCT(rootstate):
     var_list = []
     var_list.append(rootnode)
     var_list.append(n_state)
-    var_list.append(max_rmsd)
+    var_list.append(best_rmsd)
     var_list.append(max_node)
     var_list.append(rmsd_list)
     with open('vars.pickle', mode = 'wb') as f:
@@ -265,7 +265,7 @@ def UCT(rootstate):
 def make_graph(G, nd):
     state = nd.state
     uct = nd.CalcUCT()
-    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(nd.child_depth) + '\n' + str(uct))
+    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct))
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state
