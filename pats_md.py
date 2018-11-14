@@ -152,6 +152,8 @@ class Node:
         min_i = rmsds.argsort()[0]
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.trr -e %d' % (tmp, tmp, state, min_i)) # 最小値までのトラジェクトリーを切り出し
         os.system('echo 0 | gmx trjconv -s %s.tpr -f %s.trr -o md_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
+        os.system('echo 4 | gmx trjconv -s %s.tpr -f %s.trr -o md_bb_%s.gro -e %d -b %d' % (tmp, tmp, state, min_i, min_i))
+
         for file in glob.glob("*#"):
             os.remove(file)
         for ext in ['trr', 'tpr', 'edr', 'log','gro', 'cpt']:
@@ -172,7 +174,7 @@ class Node:
 def check_similarity(nd, rmsd_list):
     if nd.state == 1:
         return True
-    os.system('echo 4 4 |gmx rms -s md_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
+    os.system('echo 4 4 |gmx rms -s md_bb_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
     rmsd_tmp = np.array(read_rmsd('rmsd_tmp.xvg'))
     print(rmsd_list)
     for file in glob.glob("*#"):
@@ -234,7 +236,7 @@ def UCT(rootstate):
         if result < parent_rmsd: # RMSDが減少した場合のみexpandする
             if check_similarity(node, rmsd_list):
                 parent_node.AddChild(node)
-                os.system('cat md_%s.gro >> all_structure.gro'%state) # 構造を保存
+                os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
                 rmsd_list.append(result) # RMSDを保存
                 n_state += 1
             else:
