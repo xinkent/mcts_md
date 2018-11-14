@@ -126,7 +126,6 @@ class Node:
             for file in glob.glob('%s*' % tmp):
                 os.remove(file)
         self.rmsd = min_rmsd
-        self.rmsd_depth_dict[self.depth] = min_rmsd
         return min_rmsd
 
     def prog_widenning(self):
