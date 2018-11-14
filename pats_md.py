@@ -213,7 +213,7 @@ def UCT(rootstate):
             node.Update(result, depth)
             node = node.parentNode
 
-        o.write(str(-1 * best_rmsd) + '\n')
+        o.write(str(best_rmsd) + '\n')
         o.close()
         if i % 100 == 0:
             G = Graph(format='svg')
