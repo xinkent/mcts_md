@@ -194,7 +194,7 @@ def UCT(rootstate):
         print('state is ' + str(state))
         node = node.MakeChild(s = state, d = depth)
         min_rmsd = node.MDrun()
-        if min_rmsd < parent_rmsd: # RMSDが減少した場合のみexpandする
+        if parent_rmsd - min_rmsd > 0.0001: # RMSDが減少した場合のみexpandする
             if check_similarity(node, rmsd_list):
                 parent_node.AddChild(node)
                 os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存

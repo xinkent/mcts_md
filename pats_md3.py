@@ -95,7 +95,7 @@ class Node:
         self.visits += 1
         if result > self.rmsd_max:
             self.rmsd_max = result
-        if self.state != 0:
+        if self.state != 0 and self.state-1 < len(similarity_list):
             self.n_sim = similarity_list[self.state - 1]
 
     def MDrun(self):
@@ -202,10 +202,9 @@ def UCT(rootstate):
         state = n_state + 1
         depth = parent_depth + 1
         # node = node.AddChild(state) # add child and descend tree
-        print('state is ' + str(state))
         node = node.MakeChild(s = state, d = depth)
         min_rmsd = node.MDrun()
-        if min_rmsd < parent_rmsd: # RMSDが減少した場合のみexpandする
+        if parent_rmsd - min_rmsd > 0.0001: # RMSDが減少した場合のみexpandする
             parent_node.AddChild(node)
             similarity_list = check_similarity(node, similarity_list)
             os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
