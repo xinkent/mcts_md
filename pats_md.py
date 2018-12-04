@@ -44,7 +44,6 @@ class Node:
         self.state = state
         self.untriedMoves = MAX_child
         self.c = c
-        self.alpha = 1.5
         self.rmsd = INF
         self.try_num = 0
 
@@ -54,7 +53,7 @@ class Node:
         elif ctype == 'adaptive':
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_rmsd = rmsd_diff * self.alpha + 0.0001
+            c_rmsd = rmsd_diff * self.c + 0.0001
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_rmsd * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
@@ -67,7 +66,7 @@ class Node:
         elif ctype == "adaptive":
             child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_rmsd = rmsd_diff * self.alpha + 0.0001
+            c_rmsd = rmsd_diff * self.c + 0.0001
             uct = self.rmsd_max + c_rmsd * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
