@@ -47,13 +47,21 @@ class Node:
         self.try_num = 0
 
     def UCTSelectChild(self):
+        child_rmsds = [ch.rmsd_max for ch in self.childNodes]
+        rmsd_diff = max(child_rmsds) - min(child_rmsds)
+        c_rmsd = rmsd_diff * self.alpha + 0.0001
         s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] # 通常盤
+        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_rmsd * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
         return s
 
     def CalcUCT(self):
         pnd = self.parentNode
         if pnd == None:
             return -1
+        child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
+        rmsd_diff = max(child_rmsds) - min(child_rmsds)
+        c_rmsd = rmsd_diff * self.alpha + 0.0001
+        uct = self.rmsd_max + c_rmsd * sqrt(2*log(pnd.visits) / self.visits)
         uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
