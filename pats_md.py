@@ -23,6 +23,7 @@ parser.add_argument('--continue_', '-cn',    type = int,   default = 0)
 parser.add_argument('--ntmpi',     '-ntmpi', type = int,   default = 1)
 parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10)
 parser.add_argument('--delete',    '-del'  , type = int,   default = 0)
+parser.add_argument('--ctype',    '-ctype' ,               default = 'normal')
 args = parser.parse_args()
 reactant = args.reactant
 target   = args.target
@@ -31,6 +32,7 @@ topol    = args.topol
 ntmpi    = args.ntmpi
 ntomp    = args.ntomp
 delete   = args.delete
+ctype    = args.ctype
 class Node:
     def __init__(self, move = None, parent = None, state = None, c = c_, depth = 0):
         self.parentNode = parent # "None" for the root node
@@ -47,22 +49,26 @@ class Node:
         self.try_num = 0
 
     def UCTSelectChild(self):
-        child_rmsds = [ch.rmsd_max for ch in self.childNodes]
-        rmsd_diff = max(child_rmsds) - min(child_rmsds)
-        c_rmsd = rmsd_diff * self.alpha + 0.0001
-        s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] # 通常盤
-        # s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_rmsd * sqrt(2*log(self.visits)/ch.visits))[-1] # RMSDの差に比例してCを定める方式
+        if ctype == 'normal':
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
+        elif ctype == 'adaptive':
+            child_rmsds = [ch.rmsd_max for ch in self.childNodes]
+            rmsd_diff = max(child_rmsds) - min(child_rmsds)
+            c_rmsd = rmsd_diff * self.alpha + 0.0001
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_rmsd * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
     def CalcUCT(self):
         pnd = self.parentNode
         if pnd == None:
             return -1
-        child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
-        rmsd_diff = max(child_rmsds) - min(child_rmsds)
-        c_rmsd = rmsd_diff * self.alpha + 0.0001
-        uct = self.rmsd_max + c_rmsd * sqrt(2*log(pnd.visits) / self.visits)
-        uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
+        if ctype == "normal":
+            uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
+        elif ctype == "adaptive":
+            child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
+            rmsd_diff = max(child_rmsds) - min(child_rmsds)
+            c_rmsd = rmsd_diff * self.alpha + 0.0001
+            uct = self.rmsd_max + c_rmsd * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
     def MakeChild(self, s, d):
