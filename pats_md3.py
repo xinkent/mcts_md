@@ -143,7 +143,7 @@ class Node:
 
 
 # 全ての構造との距離を計算し、θ nm未満のものをカウント
-def check_similarity(nd, similarity_list):
+def check_similarity(nd, similarity_list, dec_flag):
     if nd.state <= 1:
         return [0]
 
@@ -153,7 +153,8 @@ def check_similarity(nd, similarity_list):
     n_similar = np.sum(bool_tmp)
     for idx in np.where(bool_tmp)[0]:
         similarity_list[idx] += 1
-    similarity_list.append(n_similar)
+    if dec_flag:    
+      similarity_list.append(n_similar)
     for file in glob.glob("*#"):
         os.remove(file)
     return similarity_list
@@ -204,9 +205,10 @@ def UCT(rootstate):
         # node = node.AddChild(state) # add child and descend tree
         node = node.MakeChild(s = state, d = depth)
         min_rmsd = node.MDrun()
-        if parent_rmsd - min_rmsd > 0.0001: # RMSDが減少した場合のみexpandする
+        dec_flag = parent_rmsd - min_rmsd > 0.0001
+        similarity_list = check_similarity(node, similarity_list, dec_flag)
+        if dec_flag: # RMSDが減少した場合のみexpandする
             parent_node.AddChild(node)
-            similarity_list = check_similarity(node, similarity_list)
             os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
             n_state += 1
         # Backpropagate
