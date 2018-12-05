@@ -55,12 +55,12 @@ class Node:
 
     def UCTSelectChild(self):
         if ctype == 'normal':
-            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max * (ch.alpha ** ch.n_sim) + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
         elif ctype == 'adaptive':
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = rmsd_diff * self.alpha + 0.0001
-            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max * (ch.alpha ** ch.n_sim) + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
+            c_adap = rmsd_diff * self.c + 0.0001
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
     def CalcUCT(self):
@@ -68,12 +68,13 @@ class Node:
         if pnd == None:
             return -1
         if ctype == "normal":
-            uct = self.rmsd_max * (self.alpha ** self.n_sim) + self.c * sqrt(2*log(pnd.visits) / self.visits)
+            uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
         elif ctype == "adaptive":
             child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = rmsd_diff * self.alpha + 0.0001
-            uct = self.rmsd_max * (self.alpha ** self.n_sim) + c_adap * sqrt(2*log(pnd.visits) / self.visits)
+            c_adap = rmsd_diff * self.c + 0.0001
+            uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / self.visits)
+        return uct
 
     def MakeChild(self, s, d):
         n = Node(parent = self, state = s, c = self.c, depth = d)
@@ -97,16 +98,16 @@ class Node:
     def SearchMaxRmsd(self):
         child_rmsds = [ch.rmsd_max for ch in self.childNodes]
         if child_rmsds != []:
-            self.max_rmsd = max(child_rmsds)
+            self.rmsd_max = max(child_rmsds)
         else:
-            self.max_rmsd = -INF
+            self.rmsd_max = -INF
 
     def Update(self, result, similarity_list):
         self.visits += 1
-        if result > self.rmsd_max:
-            self.rmsd_max = result
-        if self.state != 0 and self.state-1 < len(similarity_list):
-            self.n_sim = similarity_list[self.state - 1]
+        # if result > self.rmsd_max:
+        #     self.rmsd_max = result
+        # if self.state != 0 and self.state-1 < len(similarity_list):
+        #     self.n_sim = similarity_list[self.state - 1]
 
     def MDrun(self):
         global FIRST_FLAG
@@ -150,6 +151,20 @@ class Node:
 
     def prog_widenning(self):
         return sqrt(self.visits) < (3/2) * len(self.childNodes)
+
+def update_rmsd_max(node, similarity_list):
+    state = node.state
+    if state != 0:
+        node.n_sim = similarity_list[state-1]
+    if len(node.childNodes) == 0:
+        rmsd_cor = node.rmsd * (node.alpha ** node.n_sim)
+        node.rmsd_max = -rmsd_cor
+        return node.rmsd_max
+    rmsd_cors = [update_rmsd_max(ch) for ch in node.childNodes]
+    rmsd_max_cor = max(rmsd_cors)
+    node.rmsd_max = rmsd_max_cor
+    return node.rmsd_max
+
 
 
 # 全ての構造との距離を計算し、θ nm未満のものをカウント
@@ -232,6 +247,8 @@ def UCT(rootstate):
 
         o.write(str(best_rmsd) + '\n')
         o.close()
+        # 全ノードのrmsd_maxをupdate
+        update_rmsd_max(rootnode, similarity_list)
         if i % 100 == 0:
             G = Graph(format='svg')
             G.attr('node', shape='circle')
