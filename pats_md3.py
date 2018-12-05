@@ -8,7 +8,7 @@ from graphviz import Graph
 import argparse
 import pickle
 MAX_child = 3
-MAX_try = 3
+MAX_try = 5
 MIN_RMSD = 0.1
 FIRST_FLAG = 1
 INF = 10000
@@ -65,7 +65,7 @@ class Node:
         elif cytpe == "adaptive2":
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = np.sqrt(2)*node.J/4 * rmsd_diff
+            c_adap = np.sqrt(2)*self.J/4 * rmsd_diff
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
@@ -79,6 +79,11 @@ class Node:
             child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
             c_adap = rmsd_diff * self.c + 0.0001
+            uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / self.visits)
+        elif ctype == "adaptive2":
+            child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
+            rmsd_diff = max(child_rmsds) - min(child_rmsds)
+            c_adap = np.sqrt(2)*pnd.J/4 * rmsd_diff
             uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
