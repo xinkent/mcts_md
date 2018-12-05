@@ -52,6 +52,7 @@ class Node:
         self.try_num = 0
         self.n_sim = 0
         self.alpha = alpha
+        self.J = 1
 
     def UCTSelectChild(self):
         if ctype == 'normal':
@@ -60,6 +61,11 @@ class Node:
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
             c_adap = rmsd_diff * self.c + 0.0001
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
+        elif cytpe == "adaptive2":
+            child_rmsds = [ch.rmsd_max for ch in self.childNodes]
+            rmsd_diff = max(child_rmsds) - min(child_rmsds)
+            c_adap = np.sqrt(2)*node.J/4 * rmsd_diff
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
@@ -102,8 +108,10 @@ class Node:
         else:
             self.rmsd_max = -INF
 
-    def Update(self, result, similarity_list):
+    def Update(self, result, similarity_list, dec_flag):
         self.visits += 1
+        if not dec_flag:
+            self.J += 0.1
         # if result > self.rmsd_max:
         #     self.rmsd_max = result
         # if self.state != 0 and self.state-1 < len(similarity_list):
@@ -160,7 +168,7 @@ def update_rmsd_max(node, similarity_list):
         rmsd_cor = node.rmsd * (node.alpha ** node.n_sim)
         node.rmsd_max = -rmsd_cor
         return node.rmsd_max
-    rmsd_cors = [update_rmsd_max(ch) for ch in node.childNodes]
+    rmsd_cors = [update_rmsd_max(ch, similarity_list) for ch in node.childNodes]
     rmsd_max_cor = max(rmsd_cors)
     node.rmsd_max = rmsd_max_cor
     return node.rmsd_max
@@ -242,7 +250,7 @@ def UCT(rootstate):
             best_rmsd = min_rmsd
             max_node = node
         while node != None:
-            node.Update(result, similarity_list)
+            node.Update(result, similarity_list, dec_flag)
             node = node.parentNode
 
         o.write(str(best_rmsd) + '\n')

@@ -46,6 +46,7 @@ class Node:
         self.c = c
         self.rmsd = INF
         self.try_num = 0
+        self.J = 1 
 
     def UCTSelectChild(self):
         if ctype == 'normal':
@@ -55,6 +56,12 @@ class Node:
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
             c_adap = rmsd_diff * self.c + 0.0001
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
+        elif cytpe == "adaptive2":
+            child_rmsds = [ch.rmsd_max for ch in self.childNodes]
+            rmsd_diff = max(child_rmsds) - min(child_rmsds)
+            c_adap = np.sqrt(2)*node.J/4 * rmsd_diff
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
+
         return s
 
     def CalcUCT(self):
@@ -96,8 +103,10 @@ class Node:
         else:
             self.max_rmsd = -INF
 
-    def Update(self, result, d):
+    def Update(self, result, dec_flag):
         self.visits += 1
+        if not dec_flag:
+            self.J += 0.1
         if result > self.rmsd_max:
             self.rmsd_max = result
 
@@ -207,7 +216,8 @@ def UCT(rootstate):
         print('state is ' + str(state))
         node = node.MakeChild(s = state, d = depth)
         min_rmsd = node.MDrun()
-        if parent_rmsd - min_rmsd > 0.0001: # RMSDが減少した場合のみexpandする
+        dec_flag = parent_rmsd - min_rmsd > 0.0001
+        if dec_flag: # RMSDが減少した場合のみexpandする
             if check_similarity(node, rmsd_list):
                 parent_node.AddChild(node)
                 os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
@@ -223,7 +233,7 @@ def UCT(rootstate):
             best_rmsd = min_rmsd
             max_node = node
         while node != None:
-            node.Update(result, depth)
+            node.Update(result, dec_flag)
             node = node.parentNode
 
         o.write(str(best_rmsd) + '\n')
