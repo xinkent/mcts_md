@@ -1,3 +1,6 @@
+"""
+n_simをvisitsに加算してペナルティとする方法
+"""
 import numpy as np
 import os, glob
 from math import *
@@ -23,6 +26,7 @@ parser.add_argument('--continue_', '-cn',    type = int,   default = 0)
 parser.add_argument('--ntmpi',     '-ntmpi', type = int,   default = 1)
 parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10)
 parser.add_argument('--delete',    '-del'  , type = int,   default = 0)
+parser.add_argument('--thresh',    '-th'  , type = float,   default = 0.1)
 parser.add_argument('--ctype',    '-ctype' ,               default = 'normal')
 args = parser.parse_args()
 reactant = args.reactant
@@ -32,6 +36,7 @@ topol    = args.topol
 ntmpi    = args.ntmpi
 ntomp    = args.ntomp
 delete   = args.delete
+th       = args.thresh
 ctype    = args.ctype
 class Node:
     def __init__(self, move = None, parent = None, state = None, c = c_, depth = 0):
@@ -46,15 +51,17 @@ class Node:
         self.c = c
         self.rmsd = INF
         self.try_num = 0
+        self.n_sim = 0
+        self.alpha = alpha
 
     def UCTSelectChild(self):
         if ctype == 'normal':
-            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/(ch.visits + ch.n_sim)))[-1] 
         elif ctype == 'adaptive':
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = rmsd_diff * self.c + 0.0001
-            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
+            c_adap = rmsd_diff * self.alpha + 0.0001
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/(ch.visits)))[-1] 
         return s
 
     def CalcUCT(self):
@@ -62,13 +69,12 @@ class Node:
         if pnd == None:
             return -1
         if ctype == "normal":
-            uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
+            uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / (self.visits+self.n_sim))
         elif ctype == "adaptive":
             child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = rmsd_diff * self.c + 0.0001
-            uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / self.visits)
-        return uct
+            c_adap = rmsd_diff * self.alpha + 0.0001
+            uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / (self.visits+self.n_sim))
 
     def MakeChild(self, s, d):
         n = Node(parent = self, state = s, c = self.c, depth = d)
@@ -96,10 +102,12 @@ class Node:
         else:
             self.max_rmsd = -INF
 
-    def Update(self, result, d):
+    def Update(self, result, similarity_list):
         self.visits += 1
         if result > self.rmsd_max:
             self.rmsd_max = result
+        if self.state != 0 and self.state-1 < len(similarity_list):
+            self.n_sim = similarity_list[self.state - 1]
 
     def MDrun(self):
         global FIRST_FLAG
@@ -145,19 +153,22 @@ class Node:
         return sqrt(self.visits) < (3/2) * len(self.childNodes)
 
 
-# 類似構造でかつ、rmsdが小さい構造がすでにある場合はFalse
-def check_similarity(nd, rmsd_list):
-    if nd.state == 1:
-        return True
+# 全ての構造との距離を計算し、θ nm未満のものをカウント
+def check_similarity(nd, similarity_list, dec_flag):
+    if nd.state <= 1:
+        return [0]
+
     os.system('echo 4 4 |gmx rms -s md_bb_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
     rmsd_tmp = np.array(read_rmsd('rmsd_tmp.xvg'))
-    print(rmsd_list)
+    bool_tmp = rmsd_tmp < th
+    n_similar = np.sum(bool_tmp)
+    for idx in np.where(bool_tmp)[0]:
+        similarity_list[idx] += 1
+    if dec_flag:    
+      similarity_list.append(n_similar)
     for file in glob.glob("*#"):
         os.remove(file)
-    if any((rmsd_tmp < 0.05) & (np.array(rmsd_list) < nd.rmsd)):
-        return False
-    else:
-        return True
+    return similarity_list
 
 
 def UCT(rootstate):
@@ -173,7 +184,7 @@ def UCT(rootstate):
         n_state = var_list[1]
         best_rmsd = var_list[2]
         max_node = var_list[3]
-        rmsd_list = var_list[4]
+        similarity_list = var_list[4]
         global FIRST_FLAG
         FIRST_FLAG = 0
     else:
@@ -182,12 +193,11 @@ def UCT(rootstate):
         n_state = rootstate
         best_rmsd = INF
         max_node    = rootnode
-        rmsd_list = []
+        similarity_list = []
         o = open('log_pats.txt','w')
         o.close()
     for i in range(steps):
         o = open('log_pats.txt','a')
-        n_o = open('near_count.txt', 'a')
         node = rootnode
         state = rootstate
         # Select
@@ -204,26 +214,21 @@ def UCT(rootstate):
         state = n_state + 1
         depth = parent_depth + 1
         # node = node.AddChild(state) # add child and descend tree
-        print('state is ' + str(state))
         node = node.MakeChild(s = state, d = depth)
         min_rmsd = node.MDrun()
-        if parent_rmsd - min_rmsd > 0.0001: # RMSDが減少した場合のみexpandする
-            if check_similarity(node, rmsd_list):
-                parent_node.AddChild(node)
-                os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
-                rmsd_list.append(min_rmsd) # RMSDを保存
-                n_state += 1
-            else:
-                n_o.write(str(state) + '\n')
-
-        n_o.close()
+        dec_flag = parent_rmsd - min_rmsd > 0.0001
+        similarity_list = check_similarity(node, similarity_list, dec_flag)
+        if dec_flag: # RMSDが減少した場合のみexpandする
+            parent_node.AddChild(node)
+            os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
+            n_state += 1
         # Backpropagate
         result = -1 * min_rmsd
         if min_rmsd < best_rmsd:
             best_rmsd = min_rmsd
             max_node = node
         while node != None:
-            node.Update(result, depth)
+            node.Update(result, similarity_list)
             node = node.parentNode
 
         o.write(str(best_rmsd) + '\n')
@@ -269,7 +274,7 @@ def UCT(rootstate):
     var_list.append(n_state)
     var_list.append(best_rmsd)
     var_list.append(max_node)
-    var_list.append(rmsd_list)
+    var_list.append(similarity_list)
     with open('vars.pickle', mode = 'wb') as f:
         pickle.dump(var_list, f)
 
@@ -278,7 +283,7 @@ def UCT(rootstate):
 def make_graph(G, nd):
     state = nd.state
     uct = nd.CalcUCT()
-    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct))
+    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct) + '\n' + str(nd.n_sim))
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state

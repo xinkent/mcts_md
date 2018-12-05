@@ -48,7 +48,6 @@ class Node:
         self.state = state
         self.untriedMoves = MAX_child
         self.c = c
-        self.alpha = 1.5
         self.rmsd = INF
         self.try_num = 0
         self.n_sim = 0
@@ -56,12 +55,12 @@ class Node:
 
     def UCTSelectChild(self):
         if ctype == 'normal':
-            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max * (ch.alpha ** ch.n_sim) + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
         elif ctype == 'adaptive':
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_rmsd = rmsd_diff * self.alpha + 0.0001
-            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_rmsd * sqrt(2*log(self.visits)/ch.visits))[-1] 
+            c_adap = rmsd_diff * self.alpha + 0.0001
+            s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max * (ch.alpha ** ch.n_sim) + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
     def CalcUCT(self):
@@ -69,12 +68,12 @@ class Node:
         if pnd == None:
             return -1
         if ctype == "normal":
-            uct = self.rmsd_max + self.c * sqrt(2*log(pnd.visits) / self.visits)
+            uct = self.rmsd_max * (self.alpha ** self.n_sim) + self.c * sqrt(2*log(pnd.visits) / self.visits)
         elif ctype == "adaptive":
             child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_rmsd = rmsd_diff * self.alpha + 0.0001
-            uct = self.rmsd_max + c_rmsd * sqrt(2*log(pnd.visits) / self.visits)
+            c_adap = rmsd_diff * self.alpha + 0.0001
+            uct = self.rmsd_max * (self.alpha ** self.n_sim) + c_adap * sqrt(2*log(pnd.visits) / self.visits)
 
     def MakeChild(self, s, d):
         n = Node(parent = self, state = s, c = self.c, depth = d)
