@@ -56,7 +56,7 @@ class Node:
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
             c_adap = rmsd_diff * self.c + 0.0001
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
-        elif cytpe == "adaptive2":
+        elif ctype == "adaptive2":
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
             c_adap = np.sqrt(2)*self.J/4 * rmsd_diff
