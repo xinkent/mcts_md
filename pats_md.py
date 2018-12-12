@@ -59,7 +59,7 @@ class Node:
         elif ctype == "adaptive2":
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = np.sqrt(2)*self.J/4 * rmsd_diff
+            c_adap = self.c * self.J * rmsd_diff
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
 
         return s
@@ -293,7 +293,7 @@ def UCT(rootstate):
 def make_graph(G, nd):
     state = nd.state
     uct = nd.CalcUCT()
-    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct))
+    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct) + '\n' + str(nd.J))
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state
