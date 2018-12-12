@@ -1,11 +1,11 @@
 import sys
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 from pats_md import *
-from pylab import *
+# from pylab import *
 from graphviz import Graph
 import mdtraj as md
 from itertools import combinations
