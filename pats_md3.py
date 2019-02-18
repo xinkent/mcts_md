@@ -270,7 +270,7 @@ def UCT(rootstate):
             G.render('./tree/tree_' + str(i) + 'epoch')
         if best_rmsd < MIN_RMSD:
             succeed = 1
-            break
+            # break
 
     # bestなノードまでのトラジェクトリを結合
 

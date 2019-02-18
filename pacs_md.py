@@ -14,7 +14,7 @@ parser.add_argument('--steps',     '-s',     type = int,   default = 1000)
 parser.add_argument('--k',         '-k',     type = int,   default = 5)
 parser.add_argument('--continue_', '-cn',    type = int,   default = 0)
 parser.add_argument('--ntmpi',     '-ntmpi', type = int,   default = 1)
-parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10)
+parser.add_argument('--ntomp',     '-ntomp', type = int,   default = 10) 
 parser.add_argument('--delete',    '-del'  , type = int,   default = 0)
 args = parser.parse_args()
 reactant = args.reactant
@@ -66,7 +66,8 @@ def pacs_md(MAX_CYCLE, n_para, continue_flag):
         cycle_num = 0 # 現実行時におけるステップ数
     min_rmsd = 10000 # 初期値
 
-    while cycle_num < MAX_CYCLE and min_rmsd >= MIN_RMSD:
+    # while cycle_num < MAX_CYCLE and min_rmsd >= MIN_RMSD:
+    while cycle_num < MAX_CYCLE:
         if not continue_flag:
             if cycle_step == 0:
                 for i in range(n_para):
@@ -98,7 +99,7 @@ def pacs_md(MAX_CYCLE, n_para, continue_flag):
         # 不要なファイルを削除
         # for file in glob.glob('md_[0-9]*') + glob.glob("*#"):
         #     os.remove(file)
-
+       
         for file in glob.glob("*#"):
             os.remove(file)
         for ext in ['trr', 'tpr', 'edr', 'log','gro', 'cpt']:
@@ -118,9 +119,8 @@ def pacs_md(MAX_CYCLE, n_para, continue_flag):
     # logをファイルに保存(concat_traj)に渡す
     np.savetxt('edge_log.csv', np.array(edge_log), delimiter=',')
 
-    if min_rmsd < MIN_RMSD:
-        concat_traj()
-        make_tree_pacs('edge_log.csv')
+    concat_traj()
+    make_tree_pacs('edge_log.csv')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
 def concat_traj():
