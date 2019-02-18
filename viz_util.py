@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
 import pickle
-from pats_md import Node 
 from pylab import *
 from graphviz import Graph
 import mdtraj as md
 from itertools import combinations
 from sklearn.metrics import confusion_matrix, f1_score
+from tsmd import Node
 
 def read_rmsd(name):
     f = open(name)
@@ -51,26 +51,33 @@ def modify_rmsd(ip, op):
     f.close()
     o.close()
 
-def make_tree_pacs(log_file):
+def draw_pacs_tree_colored(log_file, out):
     log = pd.read_csv(log_file, header = None)
     log = np.array(log)
-    G = Graph(format='svg')
-    G.attr('node', shape='circle')
-    G.graph_attr.update(size="320")
-    G.node('0-0', '0-0')
+    n_cycles = log.shape[0]
+    G = Graph(format='pdf')
+    G.attr('node', shape='circle', style='filled')
+    G.graph_attr.update(size="30")
+    color_hex = value2hex(0) 
+    G.node('0-0', '0', fillcolor=color_hex)
+    # G.node('0-0', '', fillcolor=color_hex, color='white', width='12')
+    color_hex = value2hex(255/n_cycles * 1) 
     for i in range(5):
         state = '1-' + str(i)
-        G.node(state, state)
-        G.edge('0-0', state)
-
-    for i in range(len(log)):
-        log_i = log[i]
+        G.node(state, str(state), fillcolor=color_hex)
+        # G.node(state, '', fillcolor=color_hex, color='white', width='12')
+        G.edge('0-0', state, color='black')
+    for i in range(1, len(log) + 1):
+        log_i = log[i-1]
+        color_hex = value2hex(255/n_cycles * (i+1))
         for j, l in enumerate(log_i):
-            state = str(i + 2) + '-' + str(j)
-            pstate = str(i + 1) + '-' + str(int(l))
-            G.node(state, state)
-            G.edge(pstate, state)
-    G.render('tree_pacs')
+            state = str(i + 1) + '-' + str(j)
+            pstate = str(i) + '-' + str(int(l))
+            G.node(state, str(state), fillcolor=color_hex)
+            # G.node(state, '', fillcolor=color_hex, color='white', width='12')
+            G.edge(pstate, state, color='black')
+    G.render(out)
+    make_colorbar(0, n_cycles * 5, out + '_colorbar')
 
 
 def draw_pats_tree_colored(pkl,out, col_style='contact', **kwarg):
@@ -122,16 +129,22 @@ def make_graph(G,nd, values):
             print(nd.childNodes[0].rmsd)
         else:
             v = 255 / (0.7 - 0) * nd.rmsd 
-    r,g,b, _  = [int(c * 255) for c in cm.plasma_r(int(v))]
-    r_hex,g_hex,b_hex = hex(r), hex(g), hex(b)
-    color_hex = "#" + r_hex[2:].zfill(2) + g_hex[2:].zfill(2) + b_hex[2:].zfill(2)
-    G.node(str(state), fillcolor=color_hex, color='white')
+    color_hex = value2hex(v)
+    # G.node(str(state), fillcolor=color_hex, color='white', width='12')
+    G.node(str(state),str(state), fillcolor=color_hex)
     parent_node = nd.parentNode
     if parent_node != None:
         parent_state = parent_node.state
-        G.edge(str(parent_state), str(state), color='gray')
+        G.edge(str(parent_state), str(state), color='black')
     for child_node in nd.childNodes:
         make_graph(G,child_node, values)
+
+def value2hex(v):
+    r,g,b, _  = [int(c * 255) for c in cm.plasma_r(int(v))]
+    # r,g,b, _  = [int(c * 255) for c in cm.brg(int(v))]
+    r_hex,g_hex,b_hex = hex(r), hex(g), hex(b)
+    color_hex = "#" + r_hex[2:].zfill(2) + g_hex[2:].zfill(2) + b_hex[2:].zfill(2)
+    return color_hex
 
 def make_colorbar(vmin, vmax, name):
    fig = plt.figure(figsize=(5,1)) 
@@ -215,7 +228,9 @@ def calc_f1(n, t):
     native_contacts = calc_contacts(native)
     trj_contacts    = [calc_contacts(t) for t in traj]
     f1_list =  [f1_score(native_contacts, tc) for tc in trj_contacts]
-    return f1_list
+    return np.array(f1_list)
 
 def calc_rg(t):
-    return md.compute_rg(t)
+    traj = md.load(t)
+    return md.compute_rg(traj)
+

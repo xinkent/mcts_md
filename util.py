@@ -23,6 +23,7 @@ def read_rmsd(name):
     f.close()
     return rmsd
 
+# modify the rmsd.xvg in concatenated trajectory
 def modify_rmsd(ip, op):
     f = open(ip)
     o = open(op, 'w')
