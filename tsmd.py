@@ -245,8 +245,6 @@ def UCT(rootstate):
             succeed = 1
             # break
 
-    # make reactive trajectory and tree graph
-
     # 途中経過をpickleに保存
     var_list = []
     var_list.append(rootnode)
@@ -256,6 +254,10 @@ def UCT(rootstate):
     var_list.append(similarity_list)
     with open('vars.pickle', mode = 'wb') as f:
         pickle.dump(var_list, f)
+
+    # make reactive trajectory and tree graph
+    make_reactive('vars.pickle')
+    draw_pats_tree_colored('vars.pickle', 'tree_graph', col_style='order')
 
 
 if __name__ == "__main__":

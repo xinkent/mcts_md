@@ -1,8 +1,9 @@
 import sys
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 from pylab import *
@@ -12,6 +13,9 @@ from itertools import combinations
 from sklearn.metrics import confusion_matrix, f1_score
 from tsmd import Node
 
+#---------------------------------------------------------------------------------------
+# Utility functions
+#---------------------------------------------------------------------------------------
 def read_rmsd(name):
     f = open(name)
     rmsd = []
@@ -51,6 +55,9 @@ def modify_rmsd(ip, op):
     f.close()
     o.close()
 
+#---------------------------------------------------------------------------------------
+# Draw graphs
+#---------------------------------------------------------------------------------------
 def draw_pacs_tree_colored(log_file, out):
     log = pd.read_csv(log_file, header = None)
     log = np.array(log)
@@ -119,6 +126,7 @@ def dfs(nd):
     return sum([dfs(ch) for ch in nd.childNodes]) + 1    
 
 
+
 def make_graph(G,nd, values):
     state = nd.state
     if values is not None:
@@ -155,6 +163,43 @@ def make_colorbar(vmin, vmax, name):
    # cb.set_label(name) 
    plt.savefig(name + '.pdf')
    plt.close()
+
+#---------------------------------------------------------------------------------------
+# Generate a reactive trajectory
+#---------------------------------------------------------------------------------------
+
+def dfs_rmsd(nd, r_dic, n_dic):
+    state = nd.state
+    rmsd = nd.rmsd
+    r_dic[state] = rmsd
+    n_dic[state] = nd
+    for ch in nd.childNodes:
+      dfs_rmsd(ch,r_dic, n_dic)
+
+def make_reactive(pkl):
+  with open(pkl, 'rb') as f:
+      l = pickle.load(f)
+
+  rootnode = l[0]
+  rmsd_dic = {}
+  node_dic = {}
+  dfs_rmsd(rootnode, rmsd_dic, node_dic)
+  max_state = min(rmsd_dic, key=rmsd_dic.get)
+  max_node = node_dic[max_state]
+
+  trjs = ""
+  node = max_node
+  while True:
+      trjs = '../' + dir_name + "/md_" + str(node.state) + ".trr " + trjs
+      node = node.parentNode
+      if node.parentNode == None:
+          break
+  print(trjs)
+  os.system('gmx trjcat -f {0} -o reactive/{1}.trr -cat'.format(trjs, dir_name))
+
+#---------------------------------------------------------------------------------------
+# Calculate properties of protein structure
+#---------------------------------------------------------------------------------------
 
 def best_hummer_q(traj, native):
     """Compute the fraction of native contacts according the definition from
