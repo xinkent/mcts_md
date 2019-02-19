@@ -52,7 +52,6 @@ class Node:
         self.rmsd = INF
         self.try_num = 0
         self.n_sim = 0
-        self.alpha = alpha
 
     def UCTSelectChild(self):
         if ctype == 'normal':
@@ -60,7 +59,7 @@ class Node:
         elif ctype == 'adaptive':
             child_rmsds = [ch.rmsd_max for ch in self.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = rmsd_diff * self.alpha + 0.0001
+            c_adap = rmsd_diff * self.c + 0.0001
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/(ch.visits + ch.n_sim)))[-1] 
         return s
 
@@ -73,7 +72,7 @@ class Node:
         elif ctype == "adaptive":
             child_rmsds = [ch.rmsd_max for ch in pnd.childNodes]
             rmsd_diff = max(child_rmsds) - min(child_rmsds)
-            c_adap = rmsd_diff * self.alpha + 0.0001
+            c_adap = rmsd_diff * self.c + 0.0001
             uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / (self.visits+self.n_sim))
 
     def MakeChild(self, s, d):

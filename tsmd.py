@@ -1,10 +1,9 @@
 import numpy as np
 import os, glob
 from math import *
-from util import *
+from viz_util import *
 import random
 import copy
-from graphviz import Graph
 import argparse
 import pickle
 MAX_child = 3
@@ -37,6 +36,7 @@ delete   = args.delete
 th       = args.thresh
 alpha    = args.alpha
 ctype    = args.ctype
+
 class Node:
     def __init__(self, move = None, parent = None, state = None, c = c_, depth = 0):
         self.parentNode = parent # "None" for the root node
@@ -54,7 +54,7 @@ class Node:
         self.alpha = alpha
         self.J = 1
 
-    def UCTSelectChild(self):
+    def uct_select_child(self):
         if ctype == 'normal':
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + self.c * sqrt(2*log(self.visits)/ch.visits))[-1] 
         elif ctype == 'adaptive':
@@ -69,7 +69,7 @@ class Node:
             s = sorted(self.childNodes, key = lambda ch: ch.rmsd_max + c_adap * sqrt(2*log(self.visits)/ch.visits))[-1] 
         return s
 
-    def CalcUCT(self):
+    def calc_uct(self):
         pnd = self.parentNode
         if pnd == None:
             return -1
@@ -87,33 +87,16 @@ class Node:
             uct = self.rmsd_max + c_adap * sqrt(2*log(pnd.visits) / self.visits)
         return uct
 
-    def MakeChild(self, s, d):
+    def make_child(self, s, d):
         n = Node(parent = self, state = s, c = self.c, depth = d)
         return n
 
-    def AddChild(self, n):
-        # n = Node(parent = self, state = s)
+    def add_child(self, n):
         self.untriedMoves -= 1
         self.childNodes.append(n)
         return n
 
-    def DeleteChild(self, n):
-        delete_i = -1
-        for ch_i, ch in enumerate(self.childNodes):
-            if ch.state == n.state:
-                delete_i = ch_i
-                break
-        self.childNodes.pop(delete_i)
-        # self.untriedMoves += 1
-
-    def SearchMaxRmsd(self):
-        child_rmsds = [ch.rmsd_max for ch in self.childNodes]
-        if child_rmsds != []:
-            self.rmsd_max = max(child_rmsds)
-        else:
-            self.rmsd_max = -INF
-
-    def Update(self, result, similarity_list, dec_flag):
+    def update(self, result, similarity_list, dec_flag):
         self.visits += 1
         if not dec_flag:
             self.J += 0.1
@@ -132,7 +115,6 @@ class Node:
             os.system('gmx grompp -f md.mdp -c %s.gro -t %s.cpt -p %s.top -o %s.tpr -maxwarn 5' % (reactant, reactant, topol, tmp))
         else:
             os.system('gmx grompp -f md.mdp -t md_%d.trr -o %s.tpr -c md_%d.gro -maxwarn 5' %(pstate, tmp, pstate))
-        # os.system('gmx mdrun -deffnm %s' % tmp) # pstate.trrからmdrun
         os.system('gmx mdrun -deffnm %s  -ntmpi %d  -ntomp %d -dlb auto' % (tmp,  ntmpi, ntomp))
 
         os.system("echo 4 4 | gmx rms -s %s.gro -f %s.trr  -o rmsd_%d.xvg -tu ns" % (target, tmp, state)) # rmsdを測定
@@ -179,12 +161,10 @@ def update_rmsd_max(node, similarity_list):
     return node.rmsd_max
 
 
-
 # 全ての構造との距離を計算し、θ nm未満のものをカウント
 def check_similarity(nd, similarity_list, dec_flag):
     if nd.state <= 1:
         return [0]
-
     os.system('echo 4 4 |gmx rms -s md_bb_%s.gro -f all_structure.gro -o rmsd_tmp.xvg'%(nd.state))
     rmsd_tmp = np.array(read_rmsd('rmsd_tmp.xvg'))
     bool_tmp = rmsd_tmp < th
@@ -196,7 +176,6 @@ def check_similarity(nd, similarity_list, dec_flag):
     for file in glob.glob("*#"):
         os.remove(file)
     return similarity_list
-
 
 def UCT(rootstate):
     steps     = args.steps
@@ -230,8 +209,8 @@ def UCT(rootstate):
         # Select
         # while (node.untriedMoves == 0 or node.prog_widenning()) and node.childNodes != []: # progressive widennning
         while (node.untriedMoves == 0 or node.try_num >= MAX_try) and node.childNodes != []: # node is fully expanded and non-terminal
-            # node = node.UCTSelectChildByDepth()
-            node = node.UCTSelectChild()
+            # node = node.uct_select_childByDepth()
+            node = node.uct_select_child()
             state = node.state
 
         # Expand
@@ -240,13 +219,13 @@ def UCT(rootstate):
         parent_depth = node.depth
         state = n_state + 1
         depth = parent_depth + 1
-        # node = node.AddChild(state) # add child and descend tree
-        node = node.MakeChild(s = state, d = depth)
+        # node = node.add_child(state) # add child and descend tree
+        node = node.make_child(s = state, d = depth)
         min_rmsd = node.MDrun()
         dec_flag = parent_rmsd - min_rmsd > 0.0001
         similarity_list = check_similarity(node, similarity_list, dec_flag)
         if dec_flag: # RMSDが減少した場合のみexpandする
-            parent_node.AddChild(node)
+            parent_node.add_child(node)
             os.system('cat md_bb_%s.gro >> all_structure.gro'%state) # 構造を保存
             n_state += 1
         # Backpropagate
@@ -255,47 +234,16 @@ def UCT(rootstate):
             best_rmsd = min_rmsd
             max_node = node
         while node != None:
-            node.Update(result, similarity_list, dec_flag)
+            node.update(result, similarity_list, dec_flag)
             node = node.parentNode
 
         o.write(str(best_rmsd) + '\n')
         o.close()
         # 全ノードのrmsd_maxをupdate
         update_rmsd_max(rootnode, similarity_list)
-        if i % 100 == 0:
-            G = Graph(format='svg')
-            G.attr('node', shape='circle')
-            G.graph_attr.update(size="1200")
-            make_graph(G,rootnode)
-            G.render('./tree/tree_' + str(i) + 'epoch')
         if best_rmsd < MIN_RMSD:
             succeed = 1
             # break
-
-    # bestなノードまでのトラジェクトリを結合
-
-    trjs = ""
-    node = max_node
-    while True:
-        print(node.state)
-        trjs = "md_" + str(node.state) + ".trr " + trjs
-        node = node.parentNode
-        if node.parentNode == None:
-            break
-    o_trj = open('trjs.txt', 'w')
-    o_trj.write(trjs)
-    o_trj.close()
-    os.system("gmx trjcat -f " + trjs + " -o merged_pats.trr -cat")
-    os.system("echo 4 4 | gmx rms -s %s.gro -f merged_pats.trr -tu ns -o rmsd_pats_tmp.xvg" % target)
-    modify_rmsd('rmsd_pats_tmp.xvg', 'rmsd_pats.xvg')
-    os.remove('rmsd_pats_tmp.xvg')
-    # for file in (glob.glob("*#") + glob.glob("md_*") + glob.glob("rmsd_[0-9]*")):
-    #     os.remove(file)
-    G = Graph(format='svg')
-    G.attr('node', shape='circle')
-    G.graph_attr.update(size="1200")
-    make_graph(G,rootnode)
-    G.render('./tree/pats_tree')
 
     # 途中経過をpickleに保存
     var_list = []
@@ -307,18 +255,10 @@ def UCT(rootstate):
     with open('vars.pickle', mode = 'wb') as f:
         pickle.dump(var_list, f)
 
+    # make reactive trajectory and tree graph
+    make_reactive('vars.pickle')
+    draw_pats_tree_colored('vars.pickle', 'tree_graph', col_style='order')
 
-
-def make_graph(G, nd):
-    state = nd.state
-    uct = nd.CalcUCT()
-    G.node(str(state), str(state) + '\n' + "{:.4}".format(float(nd.rmsd))  + '\n' + str(nd.visits) + '\n' + str(uct) + '\n' + str(nd.n_sim))
-    parent_node = nd.parentNode
-    if parent_node != None:
-        parent_state = parent_node.state
-        G.edge(str(parent_state), str(state))
-    for child_node in nd.childNodes:
-        make_graph(G,child_node)
 
 if __name__ == "__main__":
     UCT(0)

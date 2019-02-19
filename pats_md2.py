@@ -143,7 +143,6 @@ class Node:
         self.x = min_x
         self.rmsd = min_rmsd
         self.hrmsd = min_hrmsd
-        # self.rmsd_depth_dict[self.depth] = min_rmsd
         return min_x, min_rmsd
 
     def prog_widenning(self):
