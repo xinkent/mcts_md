@@ -1,4 +1,5 @@
 import sys
+import os
 import numpy as np
 import pandas as pd
 import matplotlib as mpl
@@ -62,7 +63,8 @@ def draw_pacs_tree_colored(log_file, out):
     log = pd.read_csv(log_file, header = None)
     log = np.array(log)
     n_cycles = log.shape[0]
-    G = Graph(format='pdf')
+    # G = Graph(format='pdf')
+    G = Graph(format='svg')
     G.attr('node', shape='circle', style='filled')
     G.graph_attr.update(size="30")
     color_hex = value2hex(0) 
@@ -112,7 +114,8 @@ def draw_pats_tree_colored(pkl,out, col_style='contact', **kwarg):
         make_colorbar(min(values), max(values), out + '_colorbar')
     else:
         make_colorbar(0, rootnode.childNodes[0].rmsd, out + '_colorbar')
-    G = Graph(format='pdf')
+    # G = Graph(format='pdf')
+    G = Graph(format='svg')
     G.attr("node", shape="circle", style="filled")
     G.graph_attr.update(size="30")
     make_graph(G, rootnode, values)
@@ -190,12 +193,12 @@ def make_reactive(pkl):
   trjs = ""
   node = max_node
   while True:
-      trjs = '../' + dir_name + "/md_" + str(node.state) + ".trr " + trjs
+      trjs = "md_" + str(node.state) + ".trr " + trjs
       node = node.parentNode
       if node.parentNode == None:
           break
   print(trjs)
-  os.system('gmx trjcat -f {0} -o reactive/{1}.trr -cat'.format(trjs, dir_name))
+  os.system('gmx trjcat -f {0} -o reactive.trr -cat'.format(trjs))
 
 #---------------------------------------------------------------------------------------
 # Calculate properties of protein structure
