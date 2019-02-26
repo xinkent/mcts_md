@@ -12,7 +12,21 @@ from graphviz import Graph
 import mdtraj as md
 from itertools import combinations
 from sklearn.metrics import confusion_matrix, f1_score
-from tsmd import Node
+# from tsmd import Node
+
+class Node:
+    def __init__(self, move = None, parent = None, state = None):
+        self.parentNode = parent # "None" for the root node
+        self.childNodes = []
+        self.rmsd_sum = 0
+        self.visits = 0
+        self.state = state
+        self.try_num = 0
+        self.n_sim = 0
+        self.J = 1
+
+
+
 
 #---------------------------------------------------------------------------------------
 # Utility functions
