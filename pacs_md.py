@@ -116,15 +116,15 @@ def pacs_md(MAX_CYCLE, n_para, continue_flag):
     # 最後のMDのトラジェクリについて切り取り処理をする
     for i in range(n_para):
         md_cycle([cycle_step, i, min_rmsd_idx[i],True])
-    # logをファイルに保存(concat_traj)に渡す
+    # logをファイルに保存(make_reactive)に渡す
     np.savetxt('edge_log.csv', np.array(edge_log), delimiter=',')
 
-    concat_traj()
+    make_reactive('edge_log.csv')
     make_tree_pacs('edge_log.csv')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
-def concat_traj():
-    log = np.loadtxt("edge_log.csv", delimiter = ",")
+def make_reactive(edge_log):
+    log = np.loadtxt(edge_log, delimiter = ",")
     back_list = [0]
     step = log.shape[0] - 1
     log_index = 0
