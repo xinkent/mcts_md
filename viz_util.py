@@ -193,27 +193,6 @@ def dfs_rmsd(nd, r_dic, n_dic):
     for ch in nd.childNodes:
       dfs_rmsd(ch,r_dic, n_dic)
 
-def make_reactive(pkl):
-  with open(pkl, 'rb') as f:
-      l = pickle.load(f)
-
-  rootnode = l[0]
-  rmsd_dic = {}
-  node_dic = {}
-  dfs_rmsd(rootnode, rmsd_dic, node_dic)
-  max_state = min(rmsd_dic, key=rmsd_dic.get)
-  max_node = node_dic[max_state]
-
-  trjs = ""
-  node = max_node
-  while True:
-      trjs = "md_" + str(node.state) + ".trr " + trjs
-      node = node.parentNode
-      if node.parentNode == None:
-          break
-  print(trjs)
-  os.system('gmx trjcat -f {0} -o reactive.trr -cat'.format(trjs))
-
 #---------------------------------------------------------------------------------------
 # Calculate properties of protein structure
 #---------------------------------------------------------------------------------------
