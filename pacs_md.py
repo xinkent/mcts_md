@@ -120,7 +120,7 @@ def pacs_md(MAX_CYCLE, n_para, continue_flag):
     np.savetxt('edge_log.csv', np.array(edge_log), delimiter=',')
 
     make_reactive('edge_log.csv')
-    make_tree_pacs('edge_log.csv')
+    draw_pacs_tree_colored('edge_log.csv', 'pacs_tree')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
 def make_reactive(edge_log):
