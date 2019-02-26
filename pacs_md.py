@@ -1,7 +1,7 @@
 import numpy as np
 import os, glob
 from multiprocessing import Pool
-from util import *
+from viz_util import *
 import argparse
 
 MIN_RMSD = 0.1
