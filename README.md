@@ -28,6 +28,9 @@ Both PaCS and PaTS MD program require the files shown below.
   - -ntmpi : The number of mpi.
   - -ntomp : The number of open MP
   - -del   : If you want to delete the intermediate trajectory files, set this to 1. default is 0.
+  - -thresh : A thereshold (Å) that decide whether one structure is similar to others.
+  - alp : A penalty parameter.
+  - -ctype : Choose the way how to calclate UCB. (normal, adaptive, adaptive2)
 
 If you have the reactant structure file as reactant.gro, target structure file as target.gro, and topology file as topol.top
 your command is 
