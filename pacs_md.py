@@ -144,7 +144,8 @@ def make_reactive(edge_log):
         traj_str += (traj + " ")
     # print(traj_str)
     os.system( "gmx trjcat -f " + traj_str + " -o merged_pacs.trr -cat")
-    os.system("echo 4 4| gmx rms -s target_processed.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
+    # os.system("echo 4 4| gmx rms -s target_processed.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
+    os.system("echo 4 4| gmx rms -s %s.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg"%target)
     modify_rmsd('rmsd_pacs_tmp.xvg', 'rmsd_pacs.xvg') # ’ダブり’があるので除去
     os.remove('rmsd_pacs_tmp.xvg')
 
