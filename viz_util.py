@@ -12,7 +12,21 @@ from graphviz import Graph
 import mdtraj as md
 from itertools import combinations
 from sklearn.metrics import confusion_matrix, f1_score
-from tsmd import Node
+# from tsmd import Node
+
+class Node:
+    def __init__(self, move = None, parent = None, state = None):
+        self.parentNode = parent # "None" for the root node
+        self.childNodes = []
+        self.rmsd_sum = 0
+        self.visits = 0
+        self.state = state
+        self.try_num = 0
+        self.n_sim = 0
+        self.J = 1
+
+
+
 
 #---------------------------------------------------------------------------------------
 # Utility functions
@@ -71,7 +85,7 @@ def draw_pacs_tree_colored(log_file, out):
     G.node('0-0', '0', fillcolor=color_hex)
     # G.node('0-0', '', fillcolor=color_hex, color='white', width='12')
     color_hex = value2hex(255/n_cycles * 1) 
-    for i in range(5):
+    for i in range(len(log[0])):
         state = '1-' + str(i)
         G.node(state, str(state), fillcolor=color_hex)
         # G.node(state, '', fillcolor=color_hex, color='white', width='12')
@@ -178,27 +192,6 @@ def dfs_rmsd(nd, r_dic, n_dic):
     n_dic[state] = nd
     for ch in nd.childNodes:
       dfs_rmsd(ch,r_dic, n_dic)
-
-def make_reactive(pkl):
-  with open(pkl, 'rb') as f:
-      l = pickle.load(f)
-
-  rootnode = l[0]
-  rmsd_dic = {}
-  node_dic = {}
-  dfs_rmsd(rootnode, rmsd_dic, node_dic)
-  max_state = min(rmsd_dic, key=rmsd_dic.get)
-  max_node = node_dic[max_state]
-
-  trjs = ""
-  node = max_node
-  while True:
-      trjs = "md_" + str(node.state) + ".trr " + trjs
-      node = node.parentNode
-      if node.parentNode == None:
-          break
-  print(trjs)
-  os.system('gmx trjcat -f {0} -o reactive.trr -cat'.format(trjs))
 
 #---------------------------------------------------------------------------------------
 # Calculate properties of protein structure

@@ -1,7 +1,7 @@
 import numpy as np
 import os, glob
 from multiprocessing import Pool
-from util import *
+from viz_util import *
 import argparse
 
 MIN_RMSD = 0.1
@@ -51,7 +51,7 @@ def md_cycle(args):
 
 def pacs_md(MAX_CYCLE, n_para, continue_flag):
     dt = 1 # ps for each step
-    nsteps = 101 # ショートMDのステップ数+1(時刻0を含む)
+    nsteps = 2  # ショートMDのステップ数+1(時刻0を含む)
     if continue_flag:
         edge_log = np.loadtxt("edge_log.csv", delimiter = ",")
         edge_log = [list(l) for l in edge_log]
@@ -116,15 +116,15 @@ def pacs_md(MAX_CYCLE, n_para, continue_flag):
     # 最後のMDのトラジェクリについて切り取り処理をする
     for i in range(n_para):
         md_cycle([cycle_step, i, min_rmsd_idx[i],True])
-    # logをファイルに保存(concat_traj)に渡す
+    # logをファイルに保存(make_reactive)に渡す
     np.savetxt('edge_log.csv', np.array(edge_log), delimiter=',')
 
-    concat_traj()
-    make_tree_pacs('edge_log.csv')
+    make_reactive('edge_log.csv')
+    draw_pacs_tree_colored('edge_log.csv', 'pacs_tree')
 
 # log.csvを元にshort MDのトラジェクリを繋げる
-def concat_traj():
-    log = np.loadtxt("edge_log.csv", delimiter = ",")
+def make_reactive(edge_log):
+    log = np.loadtxt(edge_log, delimiter = ",")
     back_list = [0]
     step = log.shape[0] - 1
     log_index = 0
@@ -144,7 +144,8 @@ def concat_traj():
         traj_str += (traj + " ")
     # print(traj_str)
     os.system( "gmx trjcat -f " + traj_str + " -o merged_pacs.trr -cat")
-    os.system("echo 4 4| gmx rms -s target_processed.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
+    # os.system("echo 4 4| gmx rms -s target_processed.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg")
+    os.system("echo 4 4| gmx rms -s %s.gro -f merged_pacs.trr -tu ns -o rmsd_pacs_tmp.xvg"%target)
     modify_rmsd('rmsd_pacs_tmp.xvg', 'rmsd_pacs.xvg') # ’ダブり’があるので除去
     os.remove('rmsd_pacs_tmp.xvg')
 
